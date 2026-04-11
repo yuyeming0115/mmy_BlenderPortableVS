@@ -24,6 +24,10 @@ class BlenderConfigSyncApp:
         self.root.geometry("1000x700")
         self.root.minsize(800, 600)
 
+        # macOS 特定配置：改善外观和性能
+        if self.root.tk.call('tk', 'windowingsystem') == 'aqua':
+            self.root.createcommand('tk::mac::About', self.show_about)
+
         # 核心组件
         self.path_manager = BlenderPathManager()
         self.backup_engine = BackupEngine()
@@ -37,6 +41,10 @@ class BlenderConfigSyncApp:
         # 创建界面
         self._create_menu()
         self._create_main_layout()
+
+        # 强制刷新界面（解决 macOS 渲染延迟问题）
+        self.root.update_idletasks()
+        self.root.after(100, self._on_startup)
 
     def _create_menu(self):
         """创建菜单栏"""
@@ -546,6 +554,34 @@ class BlenderConfigSyncApp:
             info += f"校验和: {manifest.checksum[:32]}..."
 
             messagebox.showinfo("备份信息", info)
+
+    def _on_startup(self):
+        """启动时自动执行的操作"""
+        # 显示欢迎信息
+        welcome_text = """
+🎨 Blender 配置同步工具 v0.2
+========================
+
+欢迎使用！本工具可以帮助你：
+• 检测已安装的 Blender 版本
+• 扫描和备份配置文件
+• 比较不同版本的配置差异
+• 选择性同步配置到目标版本
+
+快速开始：
+1. 点击 "🔄 检测版本" 按钮
+2. 选择源版本和目标版本
+3. 点击 "⚖️ 比较差异" 查看详细对比
+4. 勾选需要同步的项目并点击 "📥 同步到目标"
+
+提示：如果没有检测到 Blender，请确保已安装 Blender 并至少保存过一次用户设置。
+"""
+        self.detail_text.delete(1.0, tk.END)
+        self.detail_text.insert(tk.END, welcome_text.strip())
+        self.notebook.select(1)  # 切换到详细信息标签页
+
+        # 自动检测版本（可选）
+        self.status_label.config(text="就绪 - 点击 '🔄 检测版本' 开始使用")
 
     def show_about(self):
         """显示关于对话框"""
