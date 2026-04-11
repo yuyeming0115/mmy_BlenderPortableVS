@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QTextEdit, QGroupBox, QMessageBox, QFileDialog,
     QTreeWidget, QTreeWidgetItem, QSplitter, QFrame,
     QProgressBar, QStatusBar, QMenuBar, QMenu,
-    QDialog, QDialogButtonBox, QCheckBox
+    QDialog, QDialogButtonBox, QCheckBox, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon, QFont, QColor, QAction
@@ -251,7 +251,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
             '分类', '类型', '名称', '差异类型', '推荐操作', '风险'
         ])
         self.diff_table.setAlternatingRowColors(True)
-        self.diff_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.diff_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRow)
         self.diff_table.doubleClicked.connect(self.on_diff_double_click)
         self.diff_table.horizontalHeader().setStretchLastSection(True)
         
