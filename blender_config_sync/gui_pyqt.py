@@ -13,10 +13,11 @@ from PyQt6.QtWidgets import (
     QTabWidget, QTextEdit, QGroupBox, QMessageBox, QFileDialog,
     QTreeWidget, QTreeWidgetItem, QSplitter, QFrame,
     QProgressBar, QStatusBar, QMenuBar, QMenu,
-    QDialog, QDialogButtonBox, QCheckBox, QAbstractItemView
+    QDialog, QDialogButtonBox, QCheckBox, QAbstractItemView,
+    QLineEdit
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QIcon, QFont, QColor, QAction
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMimeData
+from PyQt6.QtGui import QIcon, QFont, QColor, QAction, QDragEnterEvent, QDropEvent
 
 from blender_config_sync.path_manager import BlenderPathManager, BlenderInstallation
 from blender_config_sync.config_scanner import ConfigScanner
@@ -189,25 +190,59 @@ class BlenderConfigSyncPyQt(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         
+        # 启用拖放功能
+        self.setAcceptDrops(True)
+        
         layout = QVBoxLayout(central)
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
         
         # 顶部：版本选择区域
         version_group = QGroupBox("📍 版本选择与操作")
-        version_layout = QHBoxLayout(version_group)
+        version_main_layout = QVBoxLayout(version_group)
         
+        # 第一行：源版本选择
+        source_row = QHBoxLayout()
         source_label = QLabel("📤 源版本:")
         source_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         self.source_combo = QComboBox()
-        self.source_combo.setMinimumWidth(250)
+        self.source_combo.setMinimumWidth(200)
+        self.source_browse_btn = QPushButton("📂 浏览...")
+        self.source_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
+        self.source_browse_btn.clicked.connect(lambda: self.browse_blender_path('source'))
+        self.source_path_label = QLabel("")
+        self.source_path_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.source_path_label.setMaximumWidth(300)
+        self.source_path_label.setWordWrap(True)
         
+        source_row.addWidget(source_label)
+        source_row.addWidget(self.source_combo)
+        source_row.addWidget(self.source_browse_btn)
+        source_row.addWidget(self.source_path_label)
+        source_row.addStretch()
+        
+        # 第二行：目标版本选择
+        target_row = QHBoxLayout()
         target_label = QLabel("→ 📥 目标版本:")
         target_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         self.target_combo = QComboBox()
-        self.target_combo.setMinimumWidth(250)
+        self.target_combo.setMinimumWidth(200)
+        self.target_browse_btn = QPushButton("📂 浏览...")
+        self.target_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
+        self.target_browse_btn.clicked.connect(lambda: self.browse_blender_path('target'))
+        self.target_path_label = QLabel("")
+        self.target_path_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.target_path_label.setMaximumWidth(300)
+        self.target_path_label.setWordWrap(True)
         
-        btn_layout = QVBoxLayout()
+        target_row.addWidget(target_label)
+        target_row.addWidget(self.target_combo)
+        target_row.addWidget(self.target_browse_btn)
+        target_row.addWidget(self.target_path_label)
+        target_row.addStretch()
+        
+        # 第三行：操作按钮
+        btn_layout = QHBoxLayout()
         detect_btn = QPushButton("🔄 检测版本")
         detect_btn.clicked.connect(self.detect_versions)
         scan_src_btn = QPushButton("🔍 扫描源配置")
@@ -219,22 +254,27 @@ class BlenderConfigSyncPyQt(QMainWindow):
         compare_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
+                min-width: 120px;
             }
             QPushButton:hover {
                 background-color: #34ce57;
             }
         """)
         
-        version_layout.addWidget(source_label)
-        version_layout.addWidget(self.source_combo)
-        version_layout.addWidget(target_label)
-        version_layout.addWidget(self.target_combo)
-        version_layout.addSpacing(20)
-        version_layout.addLayout(btn_layout)
-        version_layout.addWidget(detect_btn)
-        version_layout.addWidget(scan_src_btn)
-        version_layout.addWidget(scan_tgt_btn)
-        version_layout.addWidget(compare_btn)
+        btn_layout.addWidget(detect_btn)
+        btn_layout.addWidget(scan_src_btn)
+        btn_layout.addWidget(scan_tgt_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(compare_btn)
+        
+        # 提示标签
+        hint_label = QLabel("💡 提示：可以拖拽 Blender 配置文件夹到窗口上快速添加")
+        hint_label.setStyleSheet("color: #666; font-style: italic; padding: 5px;")
+        
+        version_main_layout.addLayout(source_row)
+        version_main_layout.addLayout(target_row)
+        version_main_layout.addLayout(btn_layout)
+        version_main_layout.addWidget(hint_label)
         
         layout.addWidget(version_group)
         
@@ -711,6 +751,148 @@ class BlenderConfigSyncPyQt(QMainWindow):
             info += f"校验和: {manifest.checksum[:32]}..."
             
             QMessageBox.information(self, "备份信息", info)
+    
+    # ========== 拖放功能 ==========
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.status_label.setText("📥 检测到文件拖入...")
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖拽放下事件"""
+        urls = event.mimeData().urls()
+        
+        if not urls:
+            return
+        
+        for url in urls:
+            path = url.toLocalFile()
+            path_obj = Path(path)
+            
+            if not path_obj.exists():
+                continue
+            
+            # 检测是否是 Blender 配置目录
+            if self._is_blender_config_dir(path_obj):
+                version = self._extract_version_from_path(path_obj)
+                
+                # 询问用户添加到源还是目标
+                choice = QMessageBox.question(
+                    self, "添加配置目录",
+                    f"检测到 Blender 配置目录:\n\n"
+                    f"📍 路径: {path}\n"
+                    f"🔢 版本: {version or '未知'}\n\n"
+                    f"要将此目录添加到哪里？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if choice == QMessageBox.StandardButton.Yes:
+                    # 添加到源版本
+                    self._add_custom_path('source', path_obj, version)
+                else:
+                    # 添加到目标版本
+                    self._add_custom_path('target', path_obj, version)
+            
+            elif path_obj.is_dir():
+                # 可能是父目录，尝试查找子目录
+                blender_dirs = list(path_obj.glob("[0-9]*.[0-9]*"))
+                if blender_dirs:
+                    for bd in blender_dirs[:3]:  # 最多显示前3个
+                        self._add_custom_path('source', bd, bd.name)
+                else:
+                    QMessageBox.information(
+                        self, "提示",
+                        f"文件夹 '{path}' 中未找到 Blender 配置目录。\n\n"
+                        "请选择包含版本号的子目录（如 '4.2' 或 '3.6'）"
+                    )
+        
+        self.status_label.setText("✅ 拖拽操作完成")
+    
+    def _is_blender_config_dir(self, path: Path) -> bool:
+        """检查是否是有效的 Blender 配置目录"""
+        config_dir = path / 'config'
+        scripts_dir = path / 'scripts'
+        
+        return (config_dir.exists() or scripts_dir.exists() or 
+                (path / 'userpref.blend').exists())
+    
+    def _extract_version_from_path(self, path: Path) -> str:
+        """从路径中提取版本号"""
+        # 尝试从目录名获取版本
+        if path.name.replace('.', '').isdigit():
+            return path.name
+        
+        # 尝试从 userpref.blend 获取（如果存在）
+        # 这里简化处理，直接返回目录名
+        return path.name
+    
+    def _add_custom_path(self, target_type: str, path: Path, version: str):
+        """添加自定义路径到下拉框"""
+        combo = self.source_combo if target_type == 'source' else self.target_combo
+        label = self.source_path_label if target_type == 'source' else self.target_path_label
+        
+        display_text = f"Blender {version} (自定义)"
+        existing_index = combo.findText(display_text)
+        
+        if existing_index < 0:
+            combo.addItem(display_text, str(path))
+            combo.setCurrentIndex(combo.count() - 1)
+        else:
+            combo.setCurrentIndex(existing_index)
+        
+        # 更新路径标签显示
+        label.setText(f"✅ {path}")
+        label.setStyleSheet("color: #4CAF50; font-size: 11px;")
+        
+        # 存储到 detected_versions 列表
+        custom_install = BlenderInstallation(
+            version=version,
+            config_path=path,
+            is_portable=True
+        )
+        
+        # 避免重复添加
+        exists = any(inst.config_path == path for inst in self.detected_versions)
+        if not exists:
+            self.detected_versions.append(custom_install)
+        
+        self.status_label.setText(f"✅ 已添加 {target_type} 版本: Blender {version}")
+    
+    # ========== 浏览功能 ==========
+    def browse_blender_path(self, target_type: str):
+        """浏览并选择 Blender 配置目录"""
+        dialog_title = f"选择{'源' if target_type == 'source' else '目标'} Blender 配置目录"
+        
+        path = QFileDialog.getExistingDirectory(
+            self,
+            dialog_title,
+            str(Path.home()),
+            QFileDialog.ShowDirsOnly
+        )
+        
+        if not path:
+            return
+        
+        path_obj = Path(path)
+        
+        if not self._is_blender_config_dir(path_obj):
+            confirm = QMessageBox.question(
+                self, "确认选择",
+                f"所选目录可能不是标准的 Blender 配置目录：\n\n{path}\n\n"
+                "是否仍要使用此目录？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+        
+        version = self._extract_version_from_path(path_obj)
+        self._add_custom_path(target_type, path_obj, version)
     
     def show_about(self):
         about_text = """
