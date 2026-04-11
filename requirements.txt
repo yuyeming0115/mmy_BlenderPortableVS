@@ -1,8 +1,8 @@
 # Blender Config Sync - 依赖清单
 
-# GUI 框架（可选，用于桌面应用）
-# PyQt6>=6.4.0          # 现代化跨平台 GUI
-# tkinter               # Python 内置，无需安装
+# GUI 框架
+PyQt6>=6.4.0              # 现代化跨平台 GUI（推荐）
+# tkinter                   # Python 内备（macOS 兼容性问题）
 
 # 文件压缩与归档
 # 无需额外依赖，使用标准库 zipfile

@@ -150,17 +150,37 @@ def cmd_compare(args):
 
 def cmd_gui(args):
     """GUI 命令：启动图形界面"""
-    try:
-        from blender_config_sync.gui import BlenderConfigSyncApp
-        app = BlenderConfigSyncApp()
-        app.run()
-    except ImportError as e:
-        print(f"❌ 无法启动 GUI: {e}")
-        print("   请确保已安装 Tkinter（通常随 Python 一起安装）")
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ GUI 启动失败: {e}")
-        sys.exit(1)
+    # 决定使用哪个 GUI 框架
+    use_pyqt = args.pyqt or (not args.tk)  # 默认使用 PyQt6
+    
+    if use_pyqt:
+        try:
+            from blender_config_sync.gui_pyqt import main as pyqt_main
+            print("🚀 启动 PyQt6 图形界面（推荐）...")
+            pyqt_main()
+            return
+        except ImportError:
+            print("⚠️ PyQt6 未安装，尝试回退到 Tkinter...")
+            use_pyqt = False
+        except Exception as e:
+            print(f"⚠️ PyQt6 启动失败: {e}")
+            print("   尝试回退到 Tkinter...")
+            use_pyqt = False
+    
+    if not use_pyqt:
+        try:
+            from blender_config_sync.gui import BlenderConfigSyncApp
+            print("🖥️ 启动 Tkinter 图形界面...")
+            app = BlenderConfigSyncApp()
+            app.run()
+        except ImportError as e:
+            print(f"❌ 无法启动 GUI: {e}")
+            print("   请安装 PyQt6: pip install PyQt6")
+            print("   或确保已安装 Tkinter")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ GUI 启动失败: {e}")
+            sys.exit(1)
 
 
 def main():
@@ -185,7 +205,9 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
 
     # GUI 子命令
-    subparsers.add_parser('gui', help='启动图形用户界面')
+    gui_parser = subparsers.add_parser('gui', help='启动图形用户界面')
+    gui_parser.add_argument('--tk', action='store_true', help='使用 Tkinter 版本 (macOS 可能有问题)')
+    gui_parser.add_argument('--pyqt', action='store_true', help='使用 PyQt6 版本 (推荐)')
 
     # scan 子命令
     scan_parser = subparsers.add_parser('scan', help='扫描 Blender 配置')
