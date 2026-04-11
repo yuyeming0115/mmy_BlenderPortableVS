@@ -865,34 +865,52 @@ class BlenderConfigSyncPyQt(QMainWindow):
     # ========== 浏览功能 ==========
     def browse_blender_path(self, target_type: str):
         """浏览并选择 Blender 配置目录"""
-        dialog_title = f"选择{'源' if target_type == 'source' else '目标'} Blender 配置目录"
-        
-        path = QFileDialog.getExistingDirectory(
-            self,
-            dialog_title,
-            str(Path.home()),
-            QFileDialog.ShowDirsOnly
-        )
-        
-        if not path:
-            return
-        
-        path_obj = Path(path)
-        
-        if not self._is_blender_config_dir(path_obj):
-            confirm = QMessageBox.question(
-                self, "确认选择",
-                f"所选目录可能不是标准的 Blender 配置目录：\n\n{path}\n\n"
-                "是否仍要使用此目录？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
+        try:
+            dialog_title = f"选择{'源' if target_type == 'source' else '目标'} Blender 配置目录"
             
-            if confirm != QMessageBox.StandardButton.Yes:
-                return
-        
-        version = self._extract_version_from_path(path_obj)
-        self._add_custom_path(target_type, path_obj, version)
+            # 使用静态方法创建对话框（避免 macOS 崩溃）
+            dialog = QFileDialog(self, dialog_title)
+            dialog.setFileMode(QFileDialog.FileMode.Directory)
+            dialog.setOptions(QFileDialog.Option.DontUseNativeDialog)  # 关键：不使用原生对话框
+            
+            if dialog.exec():
+                paths = dialog.selectedFiles()
+                if not paths:
+                    return
+                
+                path = paths[0]
+                path_obj = Path(path)
+                
+                if not path_obj.exists():
+                    QMessageBox.warning(self, "错误", "选择的路径不存在")
+                    return
+                
+                # 检查是否是 Blender 配置目录
+                if not self._is_blender_config_dir(path_obj):
+                    confirm = QMessageBox.question(
+                        self, "确认选择",
+                        f"所选目录可能不是标准的 Blender 配置目录：\n\n"
+                        f"📍 {path}\n\n"
+                        "是否仍要使用此目录？",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if confirm != QMessageBox.StandardButton.Yes:
+                        return
+                
+                version = self._extract_version_from_path(path_obj)
+                self._add_custom_path(target_type, path_obj, version)
+                
+        except Exception as e:
+            QMessageBox.critical(
+                self, "错误",
+                f"浏览文件夹时发生错误:\n\n{str(e)}\n\n"
+                "请尝试使用拖拽功能作为替代方案。"
+            )
+            print(f"❌ 浏览错误: {e}")
+            import traceback
+            traceback.print_exc()
     
     def show_about(self):
         about_text = """
