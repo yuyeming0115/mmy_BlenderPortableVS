@@ -102,22 +102,29 @@ class BackupEngine:
             result.message = f"❌ 配置路径不存在: {config_path}"
             return result
 
-        # 优先从上级目录读取版本号（Blender标准目录结构）
-        # 例如 config_path = ~/.config/blender/4.2/config，则上级目录是 4.2
+        def is_version_dir(dirname: str) -> bool:
+            """检查目录名是否是有效的Blender版本号格式"""
+            if not dirname:
+                return False
+            parts = dirname.split('.')
+            if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                return True
+            return False
+
+        # 尝试从上级目录读取版本号
+        # Blender标准目录结构:
+        #   - ~/.config/blender/4.2/config  (parent=4.2)
+        #   - /Blender/portable/5.1/config (parent=5.1)
+        #   - /Blender/portable/5.1        (parent=portable, grandparent=5.1)
         parent_dir = config_path.parent
-        version_from_parent = parent_dir.name if parent_dir.name else ""
+        grandparent_dir = parent_dir.parent
         
-        # 检查上级目录名是否是有效版本号格式（如 4.2, 3.6, 4.2.1）
-        is_valid_version = False
-        if version_from_parent:
-            parts = version_from_parent.replace('.', '').split()
-            is_valid_version = parts[0].isdigit() and len(parts) >= 1
+        final_version = blender_version
         
-        # 决定使用的版本号：优先上级目录，否则用传入的版本号
-        if is_valid_version and version_from_parent.replace('.', '').isdigit():
-            final_version = version_from_parent
-        else:
-            final_version = blender_version
+        if is_version_dir(parent_dir.name):
+            final_version = parent_dir.name
+        elif is_version_dir(grandparent_dir.name):
+            final_version = grandparent_dir.name
         
         # 解析版本号，只保留主版本和次版本（如 4.2.1 -> 4.2）
         version_parts = final_version.split('.')
