@@ -102,14 +102,30 @@ class BackupEngine:
             result.message = f"❌ 配置路径不存在: {config_path}"
             return result
 
-        # 解析版本号，只保留主版本和次版本（如 4.2.1 -> 4.2）
-        version_parts = blender_version.split('.')
-        version_short = f"{version_parts[0]}.{version_parts[1]}" if len(version_parts) >= 2 else blender_version
+        # 优先从上级目录读取版本号（Blender标准目录结构）
+        # 例如 config_path = ~/.config/blender/4.2/config，则上级目录是 4.2
+        parent_dir = config_path.parent
+        version_from_parent = parent_dir.name if parent_dir.name else ""
         
-        # 创建文件名: Blender+Portable+X.X_source.zip
-        type_marker = f"_{backup_type}" if backup_type else ""
-        timestamp = datetime.now().strftime('%m%d%H%M')
-        backup_filename = f'Blender+Portable+{version_short}{type_marker}_{timestamp}.zip'
+        # 检查上级目录名是否是有效版本号格式（如 4.2, 3.6, 4.2.1）
+        is_valid_version = False
+        if version_from_parent:
+            parts = version_from_parent.replace('.', '').split()
+            is_valid_version = parts[0].isdigit() and len(parts) >= 1
+        
+        # 决定使用的版本号：优先上级目录，否则用传入的版本号
+        if is_valid_version and version_from_parent.replace('.', '').isdigit():
+            final_version = version_from_parent
+        else:
+            final_version = blender_version
+        
+        # 解析版本号，只保留主版本和次版本（如 4.2.1 -> 4.2）
+        version_parts = final_version.split('.')
+        version_short = f"{version_parts[0]}.{version_parts[1]}" if len(version_parts) >= 2 else final_version
+        
+        # 创建文件名: Blender_X.X_Portable_YYYYMMDD.zip
+        timestamp = datetime.now().strftime('%Y%m%d')
+        backup_filename = f'Blender_{version_short}_Portable_{timestamp}.zip'
         backup_path = self.output_base / backup_filename
 
         try:
