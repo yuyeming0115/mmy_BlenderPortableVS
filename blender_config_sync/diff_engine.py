@@ -100,6 +100,11 @@ class DiffEngine:
             'name': '启动脚本',
             'icon': '🚀',
             'description': '自动执行的 Python 脚本'
+        },
+        'presets': {
+            'name': '预设配置',
+            'icon': '🎨',
+            'description': '快捷键预设、界面主题等'
         }
     }
 
@@ -148,7 +153,11 @@ class DiffEngine:
         startup_diffs = self._compare_startup_scripts(source_scanner, target_scanner)
         result.diff_items.extend(startup_diffs)
 
-        # 4. 比较配置文件存在性
+        # 4. 比较预设配置
+        preset_diffs = self._compare_presets(source_scanner, target_scanner)
+        result.diff_items.extend(preset_diffs)
+
+        # 5. 比较配置文件存在性
         config_diffs = self._compare_config_files(source_scanner, target_scanner)
         result.diff_items.extend(config_diffs)
 
@@ -350,6 +359,107 @@ class DiffEngine:
             ))
 
         return diffs
+
+    def _compare_presets(self, source: ConfigScanner, target: ConfigScanner) -> List[DiffItem]:
+        """比较预设配置（keyconfig、interface_theme等）"""
+        diffs = []
+        
+        source_presets_dir = source.scripts_dir / 'presets'
+        target_presets_dir = target.scripts_dir / 'presets'
+        
+        if not source_presets_dir.exists() and not target_presets_dir.exists():
+            return diffs
+        
+        source_preset_types = set()
+        target_preset_types = set()
+        
+        if source_presets_dir.exists():
+            source_preset_types = {d.name for d in source_presets_dir.iterdir() if d.is_dir()}
+        if target_presets_dir.exists():
+            target_preset_types = {d.name for d in target_presets_dir.iterdir() if d.is_dir()}
+        
+        all_preset_types = source_preset_types | target_preset_types
+        
+        for preset_type in sorted(all_preset_types):
+            source_type_dir = source_presets_dir / preset_type
+            target_type_dir = target_presets_dir / preset_type
+            
+            source_files = set()
+            target_files = set()
+            
+            if source_type_dir.exists():
+                source_files = {f.name for f in source_type_dir.glob('*') if f.is_file()}
+            if target_type_dir.exists():
+                target_files = {f.name for f in target_type_dir.glob('*') if f.is_file()}
+            
+            type_label = preset_type.replace('_', ' ').title()
+            
+            for file in sorted(source_files - target_files):
+                diffs.append(DiffItem(
+                    category='presets',
+                    item_type=preset_type,
+                    name=file,
+                    diff_type=DiffType.ONLY_IN_SOURCE,
+                    source_value=str(source_type_dir / file),
+                    recommended_action=SyncAction.SYNC_TO_TARGET,
+                    risk_level='medium',
+                    details={'preset_type': type_label}
+                ))
+            
+            for file in sorted(target_files - source_files):
+                diffs.append(DiffItem(
+                    category='presets',
+                    item_type=preset_type,
+                    name=file,
+                    diff_type=DiffType.ONLY_IN_TARGET,
+                    target_value=str(target_type_dir / file),
+                    recommended_action=SyncAction.KEEP_TARGET,
+                    details={'preset_type': type_label}
+                ))
+            
+            for file in sorted(source_files & target_files):
+                src_path = source_type_dir / file
+                tgt_path = target_type_dir / file
+                
+                src_hash = self._calculate_file_hash(src_path)
+                tgt_hash = self._calculate_file_hash(tgt_path)
+                
+                if src_hash != tgt_hash:
+                    diffs.append(DiffItem(
+                        category='presets',
+                        item_type=preset_type,
+                        name=file,
+                        diff_type=DiffType.MODIFIED,
+                        source_value={'hash': src_hash[:16] if src_hash else None},
+                        target_value={'hash': tgt_hash[:16] if tgt_hash else None},
+                        recommended_action=SyncAction.SYNC_TO_TARGET,
+                        risk_level='medium',
+                        details={'preset_type': type_label}
+                    ))
+                else:
+                    diffs.append(DiffItem(
+                        category='presets',
+                        item_type=preset_type,
+                        name=file,
+                        diff_type=DiffType.IDENTICAL,
+                        recommended_action=SyncAction.SKIP
+                    ))
+        
+        return diffs
+    
+    def _calculate_file_hash(self, path: Path) -> str:
+        """计算文件哈希值"""
+        import hashlib
+        if not path.exists() or not path.is_file():
+            return ''
+        try:
+            sha256 = hashlib.sha256()
+            with open(path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    sha256.update(chunk)
+            return sha256.hexdigest()
+        except Exception:
+            return ''
 
     def _compare_config_files(self, source: ConfigScanner, target: ConfigScanner) -> List[DiffItem]:
         """比较关键配置文件的存在性和修改时间"""
