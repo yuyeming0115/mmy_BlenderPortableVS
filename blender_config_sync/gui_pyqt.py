@@ -311,10 +311,10 @@ class BlenderConfigSyncPyQt(QMainWindow):
         btn_layout.addWidget(detect_btn)
         btn_layout.addWidget(scan_src_btn)
         btn_layout.addWidget(scan_tgt_btn)
-        self.backup_tgt_btn = QPushButton("💾 备份目标")
-        self.backup_tgt_btn.setStyleSheet("background-color: #ffc107;")
-        self.backup_tgt_btn.clicked.connect(self.on_backup_target)
-        btn_layout.addWidget(self.backup_tgt_btn)
+        self.backup_both_btn = QPushButton("💾 备份两端")
+        self.backup_both_btn.setStyleSheet("background-color: #ffc107;")
+        self.backup_both_btn.clicked.connect(self.on_backup_both)
+        btn_layout.addWidget(self.backup_both_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(compare_btn)
         
@@ -760,50 +760,92 @@ class BlenderConfigSyncPyQt(QMainWindow):
         
         self.status_label.setText("就绪")
     
-    def on_backup_target(self):
+    def on_backup_both(self):
+        src_path = self.source_combo.currentData()
         tgt_path = self.target_combo.currentData()
-        tgt_version = self.target_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
         
-        if not tgt_path:
-            QMessageBox.warning(self, "警告", "请先选择目标版本")
+        if not src_path and not tgt_path:
+            QMessageBox.warning(self, "警告", "请先选择源版本和目标版本")
             return
         
-        target_inst = None
-        if self.detected_versions:
-            target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
-        
-        if not target_inst:
-            target_inst = type('obj', (object,), {'version': tgt_version, 'config_path': Path(tgt_path)})()
+        src_version = self.source_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
+        tgt_version = self.target_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
         
         confirm = QMessageBox.question(
-            self, "确认备份",
-            f"是否要备份目标版本 Blender {target_inst.version} 的配置？\n\n"
-            "这将包含所有配置文件、插件和脚本。\n\n"
-            "⚠️ 重要：同步前请务必先备份目标版本！",
+            self, "确认备份两端",
+            f"即将备份源版本和目标版本的配置：\n\n"
+            f"📤 源版本: Blender {src_version}\n"
+            f"📥 目标版本: Blender {tgt_version}\n\n"
+            "这将生成两个独立的备份文件。\n\n"
+            "⚠️ 重要：同步前请务必先备份两端！",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
         if confirm != QMessageBox.StandardButton.Yes:
             return
         
-        self.status_label.setText(f"💾 正在备份目标版本 Blender {target_inst.version}...")
-        QApplication.processEvents()
+        success_count = 0
+        failed_count = 0
+        backup_paths = []
         
-        result = self.backup_engine.create_backup(
-            config_path=target_inst.config_path,
-            blender_version=target_inst.version,
-            include_addons=True,
-            backup_type='target'
-        )
-        
-        if result.success:
-            QMessageBox.information(
-                self, "备份成功",
-                f"{result.message}\n\n位置: {result.backup_path}"
+        # 备份源版本
+        if src_path:
+            self.status_label.setText(f"💾 正在备份源版本 Blender {src_version}...")
+            QApplication.processEvents()
+            
+            src_inst = None
+            if self.detected_versions:
+                src_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == src_path), None)
+            if not src_inst:
+                src_inst = type('obj', (object,), {'version': src_version, 'config_path': Path(src_path)})()
+            
+            result = self.backup_engine.create_backup(
+                config_path=src_inst.config_path,
+                blender_version=src_inst.version,
+                include_addons=True,
+                backup_type='source'
             )
+            
+            if result.success:
+                success_count += 1
+                backup_paths.append(f"源: {result.backup_path}")
+            else:
+                failed_count += 1
+        
+        # 备份目标版本
+        if tgt_path:
+            self.status_label.setText(f"💾 正在备份目标版本 Blender {tgt_version}...")
+            QApplication.processEvents()
+            
+            target_inst = None
+            if self.detected_versions:
+                target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
+            if not target_inst:
+                target_inst = type('obj', (object,), {'version': tgt_version, 'config_path': Path(tgt_path)})()
+            
+            result = self.backup_engine.create_backup(
+                config_path=target_inst.config_path,
+                blender_version=target_inst.version,
+                include_addons=True,
+                backup_type='target'
+            )
+            
+            if result.success:
+                success_count += 1
+                backup_paths.append(f"目标: {result.backup_path}")
+            else:
+                failed_count += 1
+        
+        if success_count > 0:
             self.on_list_backups()
+            paths_text = "\n".join(backup_paths)
+            QMessageBox.information(
+                self, "备份完成",
+                f"✅ 成功备份 {success_count} 个版本\n\n"
+                f"{paths_text}"
+            )
         else:
-            QMessageBox.critical(self, "备份失败", result.message)
+            QMessageBox.critical(self, "备份失败", "所有版本备份均失败")
         
         self.status_label.setText("就绪")
     
