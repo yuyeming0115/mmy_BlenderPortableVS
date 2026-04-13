@@ -169,6 +169,11 @@ python -m blender_config_sync.cli --help
 1. **浏览按钮**: 点击 "📂 浏览..." 选择包含 `config/` 和 `scripts/` 的目录
 2. **拖拽操作**: 从 Finder/资源管理器直接拖拽文件夹到窗口
 
+**支持的拖拽目录结构：**
+- `Blender/portable/4.2/config` → 自动识别 `portable` 为配置，`4.2` 为版本号
+- `Blender/portable/4.2` → 同上
+- `Blender/4.2/config` → 标准 Blender 配置目录
+
 #### 命令行完整用法
 
 ```bash
@@ -220,16 +225,23 @@ mmy_BlenderPortableVS/
 │   ├── cli.py                     # 命令行入口
 │   ├── gui_pyqt.py               # PyQt6 图形界面 ⭐
 │   ├── gui.py                     # Tkinter 图形界面
-│   └── tui.py                     # 终端交互界面
+│   ├── tui.py                     # 终端交互界面
+│   └── blender_config_sync.spec   # PyInstaller 打包配置
+├── assets/                        # 应用图标资源
+│   ├── icons/app.ico              # Windows 应用图标
+│   └── png/                       # 各尺寸 PNG 图标
 ├── tests/                         # 单元测试
 │   ├── test_config_scanner.py     # (12 用例)
 │   ├── test_backup_engine.py      # (9 用例)
 │   └── test_diff_engine.py        # (10 用例)
 ├── dist/                          # 打包输出目录
-│   ├── BlenderConfigSync          # 可执行文件
+│   ├── BlenderConfigSync          # Linux/macOS 可执行文件
+│   ├── BlenderConfigSync.exe      # Windows 可执行文件
 │   └── BlenderConfigSync.app      # macOS 应用包
 ├── start_gui.py                   # GUI 启动器
-├── build_simple.py                # 打包脚本
+├── build.py                       # 跨平台打包脚本
+├── build.bat                      # Windows 一键打包（双击运行）
+├── build_simple.py                # 简化打包脚本
 ├── diagnose_gui.py                # GUI 诊断工具
 ├── requirements.txt               # 依赖清单
 ├── .gitignore
@@ -275,12 +287,22 @@ pytest tests/ --cov=blender_config_sync
 
 ### 打包发布
 
-```bash
-# 一键打包
-python build_simple.py
+#### Windows 一键打包（推荐）
 
-# 或手动打包
-pyinstaller --name BlenderConfigSync --windowed --onefile start_gui.py
+双击运行 `build.bat`，自动完成：
+- 安装 PyInstaller 依赖
+- 清理旧构建文件
+- 执行打包
+- 打包完成后自动打开 dist 文件夹
+
+#### 命令行打包
+
+```bash
+# 一键打包（跨平台）
+python build.py
+
+# 手动打包
+pyinstaller --name BlenderConfigSync --windowed --onefile blender_config_sync/gui_pyqt.py
 
 # 输出位置
 ls -lh dist/
