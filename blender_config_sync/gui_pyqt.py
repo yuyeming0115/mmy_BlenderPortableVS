@@ -311,6 +311,10 @@ class BlenderConfigSyncPyQt(QMainWindow):
         btn_layout.addWidget(detect_btn)
         btn_layout.addWidget(scan_src_btn)
         btn_layout.addWidget(scan_tgt_btn)
+        self.backup_tgt_btn = QPushButton("💾 备份目标")
+        self.backup_tgt_btn.setStyleSheet("background-color: #ffc107;")
+        self.backup_tgt_btn.clicked.connect(self.on_backup_target)
+        btn_layout.addWidget(self.backup_tgt_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(compare_btn)
         
@@ -377,6 +381,11 @@ class BlenderConfigSyncPyQt(QMainWindow):
         backup_tab = QWidget()
         backup_layout = QVBoxLayout(backup_tab)
         
+        # 备份操作说明
+        backup_tip = QLabel("💡 提示：同步前请先「备份目标」以确保安全；双击备份可查看详情；选中备份后可「恢复」或「导入」")
+        backup_tip.setStyleSheet("color: #ffc107; font-size: 11px; padding: 5px; background-color: #3a3a2a; border-radius: 4px;")
+        backup_layout.addWidget(backup_tip)
+        
         self.backup_table = QTableWidget()
         self.backup_table.setColumnCount(4)
         self.backup_table.setHorizontalHeaderLabels(['备份文件名', '大小 (MB)', 'Blender 版本', '创建时间'])
@@ -387,11 +396,19 @@ class BlenderConfigSyncPyQt(QMainWindow):
         backup_btn_layout = QHBoxLayout()
         refresh_btn = QPushButton("🔄 刷新列表")
         refresh_btn.clicked.connect(self.on_list_backups)
+        self.restore_btn = QPushButton("📥 恢复选中")
+        self.restore_btn.setStyleSheet("background-color: #17a2b8;")
+        self.restore_btn.clicked.connect(self.restore_backup)
+        self.import_btn = QPushButton("📂 导入备份")
+        self.import_btn.clicked.connect(self.import_backup)
         delete_btn = QPushButton("🗑️ 删除选中")
         delete_btn.setStyleSheet("background-color: #dc3545;")
         delete_btn.clicked.connect(self.delete_backup)
         
         backup_btn_layout.addWidget(refresh_btn)
+        backup_btn_layout.addWidget(self.restore_btn)
+        backup_btn_layout.addWidget(self.import_btn)
+        backup_btn_layout.addStretch()
         backup_btn_layout.addWidget(delete_btn)
         
         backup_layout.addWidget(self.backup_table)
@@ -642,17 +659,36 @@ class BlenderConfigSyncPyQt(QMainWindow):
             QMessageBox.warning(self, "警告", "还没有执行过比较操作")
             return
         
+        tgt_path = self.target_combo.currentData()
+        if not tgt_path:
+            QMessageBox.warning(self, "警告", "请先选择目标版本")
+            return
+        
+        backups = self.backup_engine.list_backups()
+        target_backups = [b for b in backups if tgt_path and tgt_path in b.get('path', '')]
+        
+        if not target_backups:
+            QMessageBox.warning(
+                self, "请先备份",
+                f"⚠️ 在进行同步操作之前，必须先备份目标版本！\n\n"
+                "请选择目标版本，点击「💾 备份目标配置」按钮进行备份。\n\n"
+                "这样可以确保在同步出现问题时能够恢复。",
+                QMessageBox.StandardButton.Ok
+            )
+            self.tab_widget.setCurrentIndex(2)
+            return
+        
         confirm = QMessageBox.question(
             self, "确认同步",
             f"确定要将选中的 {len(selected_rows)} 项配置同步到目标版本吗？\n\n"
-            "建议先备份目标配置！",
+            f"已检测到目标版本有 {len(target_backups)} 个备份记录，可以放心操作。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
         if confirm != QMessageBox.StandardButton.Yes:
             return
         
-        self.status_label.setText(f"🔄 正在标记 {len(selected_rows)} 项待同步...")
+        self.status_label.setText(f"🔄 正在同步 {len(selected_rows)} 项到目标版本...")
         QApplication.processEvents()
         
         synced_count = len(selected_rows)
@@ -709,6 +745,52 @@ class BlenderConfigSyncPyQt(QMainWindow):
         result = self.backup_engine.create_backup(
             config_path=installation.config_path,
             blender_version=installation.version,
+            include_addons=True
+        )
+        
+        if result.success:
+            QMessageBox.information(
+                self, "备份成功",
+                f"{result.message}\n\n位置: {result.backup_path}"
+            )
+            self.on_list_backups()
+        else:
+            QMessageBox.critical(self, "备份失败", result.message)
+        
+        self.status_label.setText("就绪")
+    
+    def on_backup_target(self):
+        tgt_path = self.target_combo.currentData()
+        tgt_version = self.target_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
+        
+        if not tgt_path:
+            QMessageBox.warning(self, "警告", "请先选择目标版本")
+            return
+        
+        target_inst = None
+        if self.detected_versions:
+            target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
+        
+        if not target_inst:
+            target_inst = type('obj', (object,), {'version': tgt_version, 'config_path': Path(tgt_path)})()
+        
+        confirm = QMessageBox.question(
+            self, "确认备份",
+            f"是否要备份目标版本 Blender {target_inst.version} 的配置？\n\n"
+            "这将包含所有配置文件、插件和脚本。\n\n"
+            "⚠️ 重要：同步前请务必先备份目标版本！",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        
+        self.status_label.setText(f"💾 正在备份目标 Blender {target_inst.version}...")
+        QApplication.processEvents()
+        
+        result = self.backup_engine.create_backup(
+            config_path=target_inst.config_path,
+            blender_version=target_inst.version,
             include_addons=True
         )
         
@@ -814,6 +896,126 @@ class BlenderConfigSyncPyQt(QMainWindow):
             info += f"校验和: {manifest.checksum[:32]}..."
             
             QMessageBox.information(self, "备份信息", info)
+    
+    def restore_backup(self):
+        """恢复选中的备份到目标版本"""
+        selected = self.backup_table.selectedItems()
+        if not selected:
+            QMessageBox.information(self, "提示", "请先选择要恢复的备份")
+            return
+        
+        row = selected[0].row()
+        filename = self.backup_table.item(row, 0).text()
+        blender_version = self.backup_table.item(row, 2).text()
+        
+        if not self.detected_versions:
+            QMessageBox.warning(self, "警告", "请先检测 Blender 版本")
+            return
+        
+        tgt_path = self.target_combo.currentData()
+        if not tgt_path:
+            QMessageBox.warning(self, "警告", "请先在目标版本中选择一个版本")
+            return
+        
+        confirm = QMessageBox.warning(
+            self, "确认恢复",
+            f"⚠️ 危险操作！\n\n"
+            f"即将把备份「{filename}」恢复到目标版本。\n\n"
+            f"这将覆盖目标版本「{blender_version}」的现有配置！\n\n"
+            "建议：在恢复前先备份当前目标配置。\n\n"
+            "是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        
+        target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
+        if not target_inst:
+            QMessageBox.warning(self, "错误", "无法找到目标版本信息")
+            return
+        
+        backups_dir = Path.cwd() / 'backups'
+        backup_path = backups_dir / filename
+        
+        self.status_label.setText(f"🔄 正在恢复备份到 Blender {target_inst.version}...")
+        QApplication.processEvents()
+        
+        result = self.backup_engine.restore_backup(
+            backup_path=backup_path,
+            target_config_path=target_inst.config_path,
+            overwrite=True,
+            create_backup_first=True
+        )
+        
+        if result.success:
+            QMessageBox.information(
+                self, "恢复成功",
+                f"✅ 已从备份恢复 {result.restored_files} 个文件到目标版本\n\n"
+                f"跳过了 {result.skipped_files} 个已存在的文件"
+            )
+        else:
+            QMessageBox.critical(
+                self, "恢复失败",
+                f"❌ 恢复失败：\n\n" + "\n".join(result.errors)
+            )
+        
+        self.status_label.setText("就绪")
+    
+    def import_backup(self):
+        """从外部文件导入备份"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择备份文件",
+            "",
+            "ZIP 备份文件 (*.zip);;所有文件 (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        backup_path = Path(file_path)
+        
+        manifest = self.backup_engine.read_manifest(backup_path)
+        if not manifest:
+            QMessageBox.warning(
+                self, "无效备份",
+                "无法读取该备份文件的清单信息\n\n"
+                "可能文件已损坏或不是有效的备份文件"
+            )
+            return
+        
+        info = f"备份文件: {backup_path.name}\n"
+        info += "=" * 50 + "\n\n"
+        info += f"Blender 版本: {manifest.source_blender_version}\n"
+        info += f"创建时间: {manifest.created_at[:19]}\n"
+        info += f"文件数量: {len(manifest.files)}\n"
+        info += f"总大小: {manifest.total_size / 1024:.1f} KB\n\n"
+        info += "是否将此备份复制到本地备份目录？"
+        
+        confirm = QMessageBox.question(
+            self, "导入备份",
+            info,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        
+        try:
+            import shutil
+            local_path = Path.cwd() / 'backups' / backup_path.name
+            
+            if local_path.exists():
+                QMessageBox.information(self, "提示", "该备份已存在于本地备份目录中")
+            else:
+                shutil.copy2(backup_path, local_path)
+                QMessageBox.information(
+                    self, "导入成功",
+                    f"✅ 备份已复制到：\n\n{local_path}"
+                )
+                self.on_list_backups()
+        except Exception as e:
+            QMessageBox.critical(self, "导入失败", f"❌ 复制失败：\n\n{str(e)}")
     
     # ========== 拖放功能 ==========
     def dragEnterEvent(self, event: QDragEnterEvent):
