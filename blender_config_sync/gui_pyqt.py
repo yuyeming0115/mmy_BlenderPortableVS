@@ -531,19 +531,23 @@ class BlenderConfigSyncPyQt(QMainWindow):
     
     def on_compare(self):
         """执行配置比较"""
-        src_idx = self.source_combo.currentIndex()
-        tgt_idx = self.target_combo.currentIndex()
+        src_path = self.source_combo.currentData()
+        tgt_path = self.target_combo.currentData()
         
-        if src_idx < 0 or tgt_idx < 0 or not self.detected_versions:
+        if not src_path or not tgt_path:
             QMessageBox.warning(self, "警告", "请先选择源版本和目标版本")
             return
         
-        if src_idx == tgt_idx:
-            QMessageBox.warning(self, "警告", "源版本和目标版本不能相同")
+        source_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == src_path), None)
+        target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
+        
+        if not source_inst or not target_inst:
+            QMessageBox.warning(self, "警告", "源版本或目标版本无效")
             return
         
-        source_inst = self.detected_versions[src_idx]
-        target_inst = self.detected_versions[tgt_idx]
+        if src_path == tgt_path:
+            QMessageBox.warning(self, "警告", "源版本和目标版本不能相同")
+            return
         
         self.status_label.setText(f"⚖️ 正在比较 {source_inst.version} → {target_inst.version} ...")
         QApplication.processEvents()
