@@ -81,7 +81,8 @@ class BackupEngine:
         self.output_base.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self, config_path: Path, blender_version: str,
-                      include_addons: bool = True, compression: int = zipfile.ZIP_DEFLATED) -> BackupResult:
+                      include_addons: bool = True, compression: int = zipfile.ZIP_DEFLATED,
+                      backup_type: str = "") -> BackupResult:
         """
         创建配置备份
 
@@ -90,6 +91,7 @@ class BackupEngine:
             blender_version: Blender 版本号
             include_addons: 是否包含插件
             compression: 压缩类型
+            backup_type: 备份类型标记（'source' 或 'target'），用于文件名区分
 
         Returns:
             BackupResult: 备份结果
@@ -102,7 +104,8 @@ class BackupEngine:
 
         # 创建时间戳和备份文件名
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_filename = f'blender_config_{blender_version}_{timestamp}.zip'
+        type_marker = f"_{backup_type}" if backup_type else ""
+        backup_filename = f'blender_config_{blender_version}{type_marker}_{timestamp}.zip'
         backup_path = self.output_base / backup_filename
 
         try:

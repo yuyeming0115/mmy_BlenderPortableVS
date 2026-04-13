@@ -739,13 +739,14 @@ class BlenderConfigSyncPyQt(QMainWindow):
         if confirm != QMessageBox.StandardButton.Yes:
             return
         
-        self.status_label.setText(f"💾 正在备份 Blender {installation.version}...")
+        self.status_label.setText(f"💾 正在备份源版本 Blender {installation.version}...")
         QApplication.processEvents()
         
         result = self.backup_engine.create_backup(
             config_path=installation.config_path,
             blender_version=installation.version,
-            include_addons=True
+            include_addons=True,
+            backup_type='source'
         )
         
         if result.success:
@@ -785,13 +786,14 @@ class BlenderConfigSyncPyQt(QMainWindow):
         if confirm != QMessageBox.StandardButton.Yes:
             return
         
-        self.status_label.setText(f"💾 正在备份目标 Blender {target_inst.version}...")
+        self.status_label.setText(f"💾 正在备份目标版本 Blender {target_inst.version}...")
         QApplication.processEvents()
         
         result = self.backup_engine.create_backup(
             config_path=target_inst.config_path,
             blender_version=target_inst.version,
-            include_addons=True
+            include_addons=True,
+            backup_type='target'
         )
         
         if result.success:
