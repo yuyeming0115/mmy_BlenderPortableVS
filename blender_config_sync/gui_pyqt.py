@@ -569,7 +569,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
         # 清空表格
         self.diff_table.setRowCount(0)
         
-        category_icons = {'bookmarks': '📑', 'addons': '🔌', 'preferences': '⚙️', 'startup_scripts': '🚀'}
+        category_icons = {'bookmarks': '📑', 'addons': '🔌', 'preferences': '⚙️', 'startup_scripts': '🚀', 'presets': '🎨'}
         diff_icons = {
             'only_in_source': '➕', 'only_in_target': '➖',
             'modified': '✏️', 'identical': '✅', 'conflict': '⚠️'
@@ -591,7 +591,20 @@ class BlenderConfigSyncPyQt(QMainWindow):
             self.diff_table.setItem(row, 0, QTableWidgetItem(f"{cat_icon} {item.category}"))
             self.diff_table.setItem(row, 1, QTableWidgetItem(item.item_type))
             self.diff_table.setItem(row, 2, QTableWidgetItem(item.name))
-            self.diff_table.setItem(row, 3, QTableWidgetItem(f"{diff_icon} {item.diff_type.value.replace('_', ' ').title()}"))
+            
+            diff_text = item.diff_type.value.replace('_', ' ').title()
+            if item.diff_type.value == 'only_in_source':
+                diff_text = f"新 🔵 {diff_text.replace('Only In Source', '源端新增')}"
+            elif item.diff_type.value == 'only_in_target':
+                diff_text = f"旧 🔴 {diff_text.replace('Only In Target', '目标端已有')}"
+            
+            diff_item = QTableWidgetItem(f"{diff_icon} {diff_text}")
+            if item.diff_type.value == 'only_in_source':
+                diff_item.setForeground(QColor('#28a745'))
+            elif item.diff_type.value == 'only_in_target':
+                diff_item.setForeground(QColor('#dc3545'))
+            
+            self.diff_table.setItem(row, 3, diff_item)
             self.diff_table.setItem(row, 4, QTableWidgetItem(action_text))
             
             risk_item = QTableWidgetItem(item.risk_level.upper())
