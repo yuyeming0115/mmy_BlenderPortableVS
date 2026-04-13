@@ -201,45 +201,83 @@ class BlenderConfigSyncPyQt(QMainWindow):
         version_group = QGroupBox("📍 版本选择与操作")
         version_main_layout = QVBoxLayout(version_group)
         
-        # 第一行：源版本选择
-        source_row = QHBoxLayout()
+        # 拖拽区域（虚线框）
+        drop_frame = QFrame()
+        drop_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        drop_frame.setStyleSheet("""
+            QFrame {
+                border: 2px dashed #666;
+                border-radius: 8px;
+                background-color: #333;
+                padding: 10px;
+            }
+        """)
+        drop_layout = QHBoxLayout(drop_frame)
+        drop_layout.setSpacing(20)
+        drop_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 左侧：源版本
+        source_col = QVBoxLayout()
+        source_col.setSpacing(8)
+        source_header = QHBoxLayout()
         source_label = QLabel("📤 源版本:")
-        source_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        source_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4FC3F7;")
+        source_header.addWidget(source_label)
+        source_header.addStretch()
+        
+        source_controls = QHBoxLayout()
+        source_controls.setSpacing(8)
         self.source_combo = QComboBox()
-        self.source_combo.setMinimumWidth(200)
-        self.source_browse_btn = QPushButton("📂 浏览...")
+        self.source_combo.setMinimumWidth(180)
+        self.source_browse_btn = QPushButton("📂 浏览")
         self.source_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
         self.source_browse_btn.clicked.connect(lambda: self.browse_blender_path('source'))
+        source_controls.addWidget(self.source_combo)
+        source_controls.addWidget(self.source_browse_btn)
+        
         self.source_path_label = QLabel("")
-        self.source_path_label.setStyleSheet("color: #888; font-size: 11px;")
-        self.source_path_label.setMaximumWidth(300)
+        self.source_path_label.setStyleSheet("color: #888; font-size: 10px;")
         self.source_path_label.setWordWrap(True)
         
-        source_row.addWidget(source_label)
-        source_row.addWidget(self.source_combo)
-        source_row.addWidget(self.source_browse_btn)
-        source_row.addWidget(self.source_path_label)
-        source_row.addStretch()
+        source_col.addLayout(source_header)
+        source_col.addLayout(source_controls)
+        source_col.addWidget(self.source_path_label)
         
-        # 第二行：目标版本选择
-        target_row = QHBoxLayout()
-        target_label = QLabel("→ 📥 目标版本:")
-        target_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        # 中间分隔
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setStyleSheet("background-color: #555;")
+        
+        # 右侧：目标版本
+        target_col = QVBoxLayout()
+        target_col.setSpacing(8)
+        target_header = QHBoxLayout()
+        target_label = QLabel("📥 目标版本:")
+        target_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #81C784;")
+        target_header.addWidget(target_label)
+        target_header.addStretch()
+        
+        target_controls = QHBoxLayout()
+        target_controls.setSpacing(8)
         self.target_combo = QComboBox()
-        self.target_combo.setMinimumWidth(200)
-        self.target_browse_btn = QPushButton("📂 浏览...")
+        self.target_combo.setMinimumWidth(180)
+        self.target_browse_btn = QPushButton("📂 浏览")
         self.target_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
         self.target_browse_btn.clicked.connect(lambda: self.browse_blender_path('target'))
+        target_controls.addWidget(self.target_combo)
+        target_controls.addWidget(self.target_browse_btn)
+        
         self.target_path_label = QLabel("")
-        self.target_path_label.setStyleSheet("color: #888; font-size: 11px;")
-        self.target_path_label.setMaximumWidth(300)
+        self.target_path_label.setStyleSheet("color: #888; font-size: 10px;")
         self.target_path_label.setWordWrap(True)
         
-        target_row.addWidget(target_label)
-        target_row.addWidget(self.target_combo)
-        target_row.addWidget(self.target_browse_btn)
-        target_row.addWidget(self.target_path_label)
-        target_row.addStretch()
+        target_col.addLayout(target_header)
+        target_col.addLayout(target_controls)
+        target_col.addWidget(self.target_path_label)
+        
+        drop_layout.addLayout(source_col, 1)
+        drop_layout.addWidget(divider)
+        drop_layout.addLayout(target_col, 1)
         
         # 第三行：操作按钮
         btn_layout = QHBoxLayout()
@@ -271,8 +309,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
         hint_label = QLabel("💡 提示：可以拖拽 Blender 配置文件夹到窗口上快速添加")
         hint_label.setStyleSheet("color: #666; font-style: italic; padding: 5px;")
         
-        version_main_layout.addLayout(source_row)
-        version_main_layout.addLayout(target_row)
+        version_main_layout.addWidget(drop_frame)
         version_main_layout.addLayout(btn_layout)
         version_main_layout.addWidget(hint_label)
         
