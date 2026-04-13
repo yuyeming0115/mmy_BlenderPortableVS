@@ -1100,6 +1100,10 @@ class BlenderConfigSyncPyQt(QMainWindow):
             if not path_obj.exists():
                 continue
             
+            # 如果是包含 config 子目录的父目录，自动切换到 config
+            if path_obj.is_dir() and (path_obj / 'config').exists():
+                path_obj = path_obj / 'config'
+            
             # 检测是否是 Blender 配置目录
             if self._is_blender_config_dir(path_obj):
                 version = self._extract_version_from_path(path_obj)
@@ -1110,6 +1114,8 @@ class BlenderConfigSyncPyQt(QMainWindow):
                 blender_dirs = list(path_obj.glob("[0-9]*.[0-9]*"))
                 if blender_dirs:
                     for bd in blender_dirs[:3]:
+                        if (bd / 'config').exists():
+                            bd = bd / 'config'
                         self._add_custom_path(target_type, bd, bd.name)
                 else:
                     QMessageBox.information(
@@ -1122,11 +1128,8 @@ class BlenderConfigSyncPyQt(QMainWindow):
     
     def _is_blender_config_dir(self, path: Path) -> bool:
         """检查是否是有效的 Blender 配置目录"""
-        config_dir = path / 'config'
-        scripts_dir = path / 'scripts'
-        
-        return (config_dir.exists() or scripts_dir.exists() or 
-                (path / 'userpref.blend').exists())
+        # 有效的配置目录必须包含 config 子目录或 userpref.blend
+        return (path / 'config').exists() or (path / 'userpref.blend').exists()
     
     def _extract_version_from_path(self, path: Path) -> str:
         """从路径中提取版本号"""
@@ -1201,6 +1204,10 @@ class BlenderConfigSyncPyQt(QMainWindow):
                 if not path_obj.exists():
                     QMessageBox.warning(self, "错误", "选择的路径不存在")
                     return
+                
+                # 如果是包含 config 子目录的父目录，自动切换到 config
+                if path_obj.is_dir() and (path_obj / 'config').exists():
+                    path_obj = path_obj / 'config'
                 
                 # 检查是否是 Blender 配置目录
                 if not self._is_blender_config_dir(path_obj):
