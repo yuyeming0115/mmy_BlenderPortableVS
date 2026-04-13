@@ -1100,13 +1100,20 @@ class BlenderConfigSyncPyQt(QMainWindow):
             if not path_obj.exists():
                 continue
             
-            # 如果是包含 config 子目录的父目录，自动切换到 config
+            # 优先检测 Blender 目录结构 (portable + X.X)
+            is_valid, version, config_path = self._detect_blender_structure(path_obj)
+            
+            if is_valid and config_path:
+                self._add_custom_path(target_type, config_path, version)
+                continue
+            
+            # 旧的兼容逻辑：如果拖拽的是 config 目录
             if path_obj.is_dir() and (path_obj / 'config').exists():
                 path_obj = path_obj / 'config'
             
             # 检测是否是 Blender 配置目录
             if self._is_blender_config_dir(path_obj):
-                version = self._extract_version_from_path(path_obj)
+                version, _ = self._extract_version_from_path(path_obj)
                 self._add_custom_path(target_type, path_obj, version)
             
             elif path_obj.is_dir():
@@ -1116,39 +1123,124 @@ class BlenderConfigSyncPyQt(QMainWindow):
                     for bd in blender_dirs[:3]:
                         if (bd / 'config').exists():
                             bd = bd / 'config'
-                        self._add_custom_path(target_type, bd, bd.name)
+                        version, _ = self._extract_version_from_path(bd)
+                        self._add_custom_path(target_type, bd, version)
                 else:
                     QMessageBox.information(
                         self, "提示",
                         f"文件夹 '{path}' 中未找到 Blender 配置目录。\n\n"
-                        "请选择包含版本号的子目录（如 '4.2' 或 '3.6'）"
+                        "请确保包含 portable 配置文件夹或 X.X 版本目录（如 '4.2' 或 '3.6'）"
                     )
         
         self.status_label.setText(f"✅ 已添加到{'源' if target_type == 'source' else '目标'}版本")
     
     def _is_blender_config_dir(self, path: Path) -> bool:
         """检查是否是有效的 Blender 配置目录"""
-        # 有效的配置目录必须包含 config 子目录或 userpref.blend
+        # 有效的配置目录：
+        # 1. 包含 config 子目录
+        # 2. 包含 userpref.blend
+        # 3. 是 portable 目录（且包含 config 或 userpref.blend）
+        if path.name == 'portable':
+            return (path / 'config').exists() or (path / 'userpref.blend').exists()
         return (path / 'config').exists() or (path / 'userpref.blend').exists()
     
-    def _extract_version_from_path(self, path: Path) -> str:
-        """从路径中提取版本号"""
-        # 尝试从目录名获取版本
+    def _extract_version_from_path(self, path: Path) -> tuple:
+        """从路径中提取版本号和配置路径
+        
+        支持的结构：
+        - Blender/portable/X.X/config  → 版本: X.X, 配置: Blender/portable
+        - Blender/portable/config       → 版本: 从parent或目录名检测
+        - Blender/X.X/config            → 版本: X.X, 配置: Blender/X.X
+        
+        Returns:
+            tuple: (version_str, config_path)
+        """
+        path = path.resolve()
+        
+        # 情况1: path 是 config 目录，parent 是 X.X 版本
+        # 例如: Blender/portable/4.2/config
+        if path.name == 'config' and path.parent.name.replace('.', '').isdigit():
+            version = path.parent.name
+            config_root = self._find_config_root(path.parent)
+            return (version, config_root)
+        
+        # 情况2: path 是 X.X 版本目录
+        # 例如: Blender/portable/4.2
         if path.name.replace('.', '').isdigit():
-            return path.name
+            version = path.name
+            config_root = self._find_config_root(path)
+            return (version, config_root)
         
-        # 检查父目录名是否是版本号（如拖拽的是 config 子目录）
+        # 情况3: path 是 portable 目录
+        if path.name == 'portable':
+            version_dirs = list(path.glob("[0-9]*.[0-9]*"))
+            if version_dirs:
+                version = version_dirs[0].name
+            else:
+                version = "Unknown"
+            return (version, path)
+        
+        # 情况4: path 是 Blender 根目录，查找 portable 和 X.X
+        portable_dir = path / 'portable'
+        if portable_dir.exists():
+            version_dirs = list(path.glob("[0-9]*.[0-9]*"))
+            if version_dirs:
+                return (version_dirs[0].name, portable_dir)
+            else:
+                return ("Unknown", portable_dir)
+        
+        # 情况5: 其他情况，检查 parent
         if path.parent.name.replace('.', '').isdigit():
-            return path.parent.name
+            return (path.parent.name, self._find_config_root(path.parent))
         
-        # 尝试从 userpref.blend 获取（如果存在）
-        userpref = path / 'userpref.blend'
-        if not userpref.exists():
-            userpref = path.parent / 'userpref.blend'
-        if userpref.exists():
-            return path.parent.name
+        return (path.name, path)
+    
+    def _find_config_root(self, version_dir: Path) -> Path:
+        """查找配置根目录
         
-        return path.name
+        优先级：
+        1. version_dir/portable (如果存在)
+        2. version_dir/config (如果存在)
+        3. version_dir 本身
+        """
+        portable_dir = version_dir / 'portable'
+        if portable_dir.exists():
+            return portable_dir
+        
+        config_dir = version_dir / 'config'
+        if config_dir.exists():
+            return version_dir
+        
+        return version_dir
+    
+    def _detect_blender_structure(self, path: Path) -> tuple:
+        """检测 Blender 目录结构
+        
+        Returns:
+            tuple: (is_valid, version, config_path)
+        """
+        path = path.resolve()
+        
+        portable_dir = path / 'portable'
+        version_dirs = list(path.glob("[0-9]*.[0-9]*"))
+        
+        if portable_dir.exists() and version_dirs:
+            return (True, version_dirs[0].name, portable_dir)
+        
+        if path.name == 'portable':
+            version_dirs = list(path.glob("[0-9]*.[0-9]*"))
+            if version_dirs:
+                return (True, version_dirs[0].name, path)
+            return (True, "Unknown", path)
+        
+        if path.name.replace('.', '').isdigit():
+            portable_in_version = path / 'portable'
+            if portable_in_version.exists():
+                return (True, path.name, portable_in_version)
+            if (path / 'config').exists():
+                return (True, path.name, path)
+        
+        return (False, None, None)
     
     def _add_custom_path(self, target_type: str, path: Path, version: str):
         """添加自定义路径到下拉框"""
@@ -1205,7 +1297,14 @@ class BlenderConfigSyncPyQt(QMainWindow):
                     QMessageBox.warning(self, "错误", "选择的路径不存在")
                     return
                 
-                # 如果是包含 config 子目录的父目录，自动切换到 config
+                # 优先检测 Blender 目录结构 (portable + X.X)
+                is_valid, version, config_path = self._detect_blender_structure(path_obj)
+                
+                if is_valid and config_path:
+                    self._add_custom_path(target_type, config_path, version)
+                    return
+                
+                # 旧的兼容逻辑：如果拖拽的是 config 目录
                 if path_obj.is_dir() and (path_obj / 'config').exists():
                     path_obj = path_obj / 'config'
                 
@@ -1223,7 +1322,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
                     if confirm != QMessageBox.StandardButton.Yes:
                         return
                 
-                version = self._extract_version_from_path(path_obj)
+                version, _ = self._extract_version_from_path(path_obj)
                 self._add_custom_path(target_type, path_obj, version)
                 
         except Exception as e:
