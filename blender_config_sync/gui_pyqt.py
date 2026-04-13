@@ -215,7 +215,6 @@ class BlenderConfigSyncPyQt(QMainWindow):
                 border-radius: 8px;
                 background-color: #2a3a4a;
                 padding: 8px;
-                min-height: 80px;
             }
             QFrame#source_drop:hover {
                 background-color: #2e4a5a;
@@ -245,7 +244,6 @@ class BlenderConfigSyncPyQt(QMainWindow):
         source_layout.addWidget(source_header)
         source_layout.addLayout(source_controls)
         source_layout.addWidget(self.source_path_label)
-        source_layout.addStretch()
         
         # 目标版本虚线框
         self.target_drop_frame = QFrame()
@@ -257,7 +255,6 @@ class BlenderConfigSyncPyQt(QMainWindow):
                 border-radius: 8px;
                 background-color: #2a3a2a;
                 padding: 8px;
-                min-height: 80px;
             }
             QFrame#target_drop:hover {
                 background-color: #2e4a2e;
@@ -287,7 +284,6 @@ class BlenderConfigSyncPyQt(QMainWindow):
         target_layout.addWidget(target_header)
         target_layout.addLayout(target_controls)
         target_layout.addWidget(self.target_path_label)
-        target_layout.addStretch()
         
         version_row.addWidget(self.source_drop_frame, 1)
         version_row.addWidget(self.target_drop_frame, 1)
