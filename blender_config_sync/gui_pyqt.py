@@ -826,8 +826,17 @@ class BlenderConfigSyncPyQt(QMainWindow):
         if path.name.replace('.', '').isdigit():
             return path.name
         
+        # 检查父目录名是否是版本号（如拖拽的是 config 子目录）
+        if path.parent.name.replace('.', '').isdigit():
+            return path.parent.name
+        
         # 尝试从 userpref.blend 获取（如果存在）
-        # 这里简化处理，直接返回目录名
+        userpref = path / 'userpref.blend'
+        if not userpref.exists():
+            userpref = path.parent / 'userpref.blend'
+        if userpref.exists():
+            return path.parent.name
+        
         return path.name
     
     def _add_custom_path(self, target_type: str, path: Path, version: str):
