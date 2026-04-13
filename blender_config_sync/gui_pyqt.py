@@ -201,83 +201,96 @@ class BlenderConfigSyncPyQt(QMainWindow):
         version_group = QGroupBox("📍 版本选择与操作")
         version_main_layout = QVBoxLayout(version_group)
         
-        # 拖拽区域（虚线框）
-        drop_frame = QFrame()
-        drop_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        drop_frame.setStyleSheet("""
-            QFrame {
-                border: 2px dashed #666;
+        # 第一行：源版本和目标版本并排
+        version_row = QHBoxLayout()
+        version_row.setSpacing(15)
+        
+        # 源版本虚线框
+        self.source_drop_frame = QFrame()
+        self.source_drop_frame.setObjectName("source_drop")
+        self.source_drop_frame.setAcceptDrops(True)
+        self.source_drop_frame.setStyleSheet("""
+            QFrame#source_drop {
+                border: 2px dashed #4FC3F7;
                 border-radius: 8px;
-                background-color: #333;
-                padding: 10px;
+                background-color: #2a3a4a;
+                padding: 8px;
+                min-height: 80px;
+            }
+            QFrame#source_drop:hover {
+                background-color: #2e4a5a;
             }
         """)
-        drop_layout = QHBoxLayout(drop_frame)
-        drop_layout.setSpacing(20)
-        drop_layout.setContentsMargins(15, 15, 15, 15)
+        source_layout = QVBoxLayout(self.source_drop_frame)
+        source_layout.setSpacing(6)
+        source_layout.setContentsMargins(10, 8, 10, 8)
         
-        # 左侧：源版本
-        source_col = QVBoxLayout()
-        source_col.setSpacing(8)
-        source_header = QHBoxLayout()
-        source_label = QLabel("📤 源版本:")
-        source_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4FC3F7;")
-        source_header.addWidget(source_label)
-        source_header.addStretch()
+        source_header = QLabel("📤 源版本")
+        source_header.setStyleSheet("font-size: 13px; font-weight: bold; color: #4FC3F7;")
         
         source_controls = QHBoxLayout()
         source_controls.setSpacing(8)
         self.source_combo = QComboBox()
-        self.source_combo.setMinimumWidth(180)
+        self.source_combo.setMinimumWidth(160)
         self.source_browse_btn = QPushButton("📂 浏览")
-        self.source_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
+        self.source_browse_btn.setFixedWidth(70)
         self.source_browse_btn.clicked.connect(lambda: self.browse_blender_path('source'))
-        source_controls.addWidget(self.source_combo)
+        source_controls.addWidget(self.source_combo, 1)
         source_controls.addWidget(self.source_browse_btn)
         
-        self.source_path_label = QLabel("")
+        self.source_path_label = QLabel("拖拽文件夹到此处")
         self.source_path_label.setStyleSheet("color: #888; font-size: 10px;")
         self.source_path_label.setWordWrap(True)
         
-        source_col.addLayout(source_header)
-        source_col.addLayout(source_controls)
-        source_col.addWidget(self.source_path_label)
+        source_layout.addWidget(source_header)
+        source_layout.addLayout(source_controls)
+        source_layout.addWidget(self.source_path_label)
+        source_layout.addStretch()
         
-        # 中间分隔
-        divider = QFrame()
-        divider.setFrameShape(QFrame.Shape.VLine)
-        divider.setStyleSheet("background-color: #555;")
+        # 目标版本虚线框
+        self.target_drop_frame = QFrame()
+        self.target_drop_frame.setObjectName("target_drop")
+        self.target_drop_frame.setAcceptDrops(True)
+        self.target_drop_frame.setStyleSheet("""
+            QFrame#target_drop {
+                border: 2px dashed #81C784;
+                border-radius: 8px;
+                background-color: #2a3a2a;
+                padding: 8px;
+                min-height: 80px;
+            }
+            QFrame#target_drop:hover {
+                background-color: #2e4a2e;
+            }
+        """)
+        target_layout = QVBoxLayout(self.target_drop_frame)
+        target_layout.setSpacing(6)
+        target_layout.setContentsMargins(10, 8, 10, 8)
         
-        # 右侧：目标版本
-        target_col = QVBoxLayout()
-        target_col.setSpacing(8)
-        target_header = QHBoxLayout()
-        target_label = QLabel("📥 目标版本:")
-        target_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #81C784;")
-        target_header.addWidget(target_label)
-        target_header.addStretch()
+        target_header = QLabel("📥 目标版本")
+        target_header.setStyleSheet("font-size: 13px; font-weight: bold; color: #81C784;")
         
         target_controls = QHBoxLayout()
         target_controls.setSpacing(8)
         self.target_combo = QComboBox()
-        self.target_combo.setMinimumWidth(180)
+        self.target_combo.setMinimumWidth(160)
         self.target_browse_btn = QPushButton("📂 浏览")
-        self.target_browse_btn.setToolTip("手动选择 Blender 配置目录\n或拖拽文件夹到窗口上")
+        self.target_browse_btn.setFixedWidth(70)
         self.target_browse_btn.clicked.connect(lambda: self.browse_blender_path('target'))
-        target_controls.addWidget(self.target_combo)
+        target_controls.addWidget(self.target_combo, 1)
         target_controls.addWidget(self.target_browse_btn)
         
-        self.target_path_label = QLabel("")
+        self.target_path_label = QLabel("拖拽文件夹到此处")
         self.target_path_label.setStyleSheet("color: #888; font-size: 10px;")
         self.target_path_label.setWordWrap(True)
         
-        target_col.addLayout(target_header)
-        target_col.addLayout(target_controls)
-        target_col.addWidget(self.target_path_label)
+        target_layout.addWidget(target_header)
+        target_layout.addLayout(target_controls)
+        target_layout.addWidget(self.target_path_label)
+        target_layout.addStretch()
         
-        drop_layout.addLayout(source_col, 1)
-        drop_layout.addWidget(divider)
-        drop_layout.addLayout(target_col, 1)
+        version_row.addWidget(self.source_drop_frame, 1)
+        version_row.addWidget(self.target_drop_frame, 1)
         
         # 第三行：操作按钮
         btn_layout = QHBoxLayout()
@@ -805,6 +818,22 @@ class BlenderConfigSyncPyQt(QMainWindow):
         if not urls:
             return
         
+        # 根据拖拽目标判断是源还是目标
+        drop_target = self.childAt(event.position().toPoint())
+        target_type = None
+        if drop_target:
+            parent = drop_target.parent()
+            if parent == self.source_drop_frame or parent.objectName() == "source_drop":
+                target_type = 'source'
+            elif parent == self.target_drop_frame or parent.objectName() == "target_drop":
+                target_type = 'target'
+        
+        # 如果没有精确命中，尝试从位置判断
+        if not target_type:
+            pos = event.position().x()
+            width = self.width()
+            target_type = 'source' if pos < width / 2 else 'target'
+        
         for url in urls:
             path = url.toLocalFile()
             path_obj = Path(path)
@@ -815,31 +844,14 @@ class BlenderConfigSyncPyQt(QMainWindow):
             # 检测是否是 Blender 配置目录
             if self._is_blender_config_dir(path_obj):
                 version = self._extract_version_from_path(path_obj)
-                
-                # 询问用户添加到源还是目标
-                choice = QMessageBox.question(
-                    self, "添加配置目录",
-                    f"检测到 Blender 配置目录:\n\n"
-                    f"📍 路径: {path}\n"
-                    f"🔢 版本: {version or '未知'}\n\n"
-                    f"要将此目录添加到哪里？",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
-                )
-                
-                if choice == QMessageBox.StandardButton.Yes:
-                    # 添加到源版本
-                    self._add_custom_path('source', path_obj, version)
-                else:
-                    # 添加到目标版本
-                    self._add_custom_path('target', path_obj, version)
+                self._add_custom_path(target_type, path_obj, version)
             
             elif path_obj.is_dir():
                 # 可能是父目录，尝试查找子目录
                 blender_dirs = list(path_obj.glob("[0-9]*.[0-9]*"))
                 if blender_dirs:
-                    for bd in blender_dirs[:3]:  # 最多显示前3个
-                        self._add_custom_path('source', bd, bd.name)
+                    for bd in blender_dirs[:3]:
+                        self._add_custom_path(target_type, bd, bd.name)
                 else:
                     QMessageBox.information(
                         self, "提示",
@@ -847,7 +859,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
                         "请选择包含版本号的子目录（如 '4.2' 或 '3.6'）"
                     )
         
-        self.status_label.setText("✅ 拖拽操作完成")
+        self.status_label.setText(f"✅ 已添加到{'源' if target_type == 'source' else '目标'}版本")
     
     def _is_blender_config_dir(self, path: Path) -> bool:
         """检查是否是有效的 Blender 配置目录"""
