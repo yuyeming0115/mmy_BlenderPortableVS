@@ -111,20 +111,38 @@ class BackupEngine:
                 return True
             return False
 
+        def find_version_in_siblings(path: Path) -> Optional[str]:
+            """在同级目录中查找版本号文件夹"""
+            parent = path.parent
+            if not parent.exists():
+                return None
+            for item in parent.iterdir():
+                if item.is_dir() and is_version_dir(item.name):
+                    return item.name
+            return None
+
         # 尝试从上级目录读取版本号
         # Blender标准目录结构:
-        #   - ~/.config/blender/4.2/config  (parent=4.2)
-        #   - /Blender/portable/5.1/config (parent=5.1)
-        #   - /Blender/portable/5.1        (parent=portable, grandparent=5.1)
+        #   - ~/.config/blender/4.2/config  (parent=4.2) ✓
+        #   - /Blender/portable/5.1/config (parent=5.1) ✓
+        #   - /Blender/portable/config     (parent=portable, grandparent=Blender, siblings中有5.1)
         parent_dir = config_path.parent
         grandparent_dir = parent_dir.parent
         
         final_version = blender_version
         
         if is_version_dir(parent_dir.name):
+            # parent 直接就是版本号，如 ~/.config/blender/4.2/config
             final_version = parent_dir.name
         elif is_version_dir(grandparent_dir.name):
+            # grandparent 是版本号，如 /Blender/portable/5.1/config
             final_version = grandparent_dir.name
+        else:
+            # 尝试在parent的同级目录中查找版本号
+            # 如 /Blender/portable/config，parent=portable，在Blender下找5.1
+            sibling_version = find_version_in_siblings(config_path)
+            if sibling_version:
+                final_version = sibling_version
         
         # 解析版本号，只保留主版本和次版本（如 4.2.1 -> 4.2）
         version_parts = final_version.split('.')
