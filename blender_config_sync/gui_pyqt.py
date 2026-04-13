@@ -322,7 +322,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
         hint_label = QLabel("💡 提示：可以拖拽 Blender 配置文件夹到窗口上快速添加")
         hint_label.setStyleSheet("color: #666; font-style: italic; padding: 5px;")
         
-        version_main_layout.addWidget(drop_frame)
+        version_main_layout.addLayout(version_row)
         version_main_layout.addLayout(btn_layout)
         version_main_layout.addWidget(hint_label)
         
