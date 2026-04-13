@@ -102,10 +102,14 @@ class BackupEngine:
             result.message = f"❌ 配置路径不存在: {config_path}"
             return result
 
-        # 创建时间戳和备份文件名
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # 解析版本号，只保留主版本和次版本（如 4.2.1 -> 4.2）
+        version_parts = blender_version.split('.')
+        version_short = f"{version_parts[0]}.{version_parts[1]}" if len(version_parts) >= 2 else blender_version
+        
+        # 创建文件名: Blender+Portable+X.X_source.zip
         type_marker = f"_{backup_type}" if backup_type else ""
-        backup_filename = f'blender_config_{blender_version}{type_marker}_{timestamp}.zip'
+        timestamp = datetime.now().strftime('%m%d%H%M')
+        backup_filename = f'Blender+Portable+{version_short}{type_marker}_{timestamp}.zip'
         backup_path = self.output_base / backup_filename
 
         try:
