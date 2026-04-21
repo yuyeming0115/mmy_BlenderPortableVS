@@ -357,6 +357,7 @@ class BackupEngine:
                 'size_mb': round(size_mb, 2),
                 'created_at': manifest.created_at if manifest else '未知',
                 'blender_version': manifest.source_blender_version if manifest else '未知',
+                'source_config_path': manifest.source_config_path if manifest else '',
                 'files_count': len(manifest.files) if manifest else 0,
             }
 
@@ -373,6 +374,94 @@ class BackupEngine:
         except Exception:
             pass
         return False
+
+    def sync_items(self, diff_items: list, source_path: Path, target_path: Path) -> Dict:
+        """
+        同步选中的差异项到目标
+
+        Args:
+            diff_items: 要同步的 DiffItem 列表
+            source_path: 源配置路径
+            target_path: 目标配置路径
+
+        Returns:
+            Dict: 同步结果统计
+        """
+        result = {
+            'success': 0,
+            'failed': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        for item in diff_items:
+            try:
+                if item.category == 'bookmarks':
+                    self._sync_bookmarks(item, source_path, target_path)
+                elif item.category == 'addons':
+                    self._sync_addon(item, source_path, target_path)
+                elif item.category == 'preferences':
+                    self._sync_preference(item, source_path, target_path)
+                elif item.category == 'presets':
+                    self._sync_preset(item, source_path, target_path)
+                else:
+                    result['skipped'] += 1
+                    continue
+
+                result['success'] += 1
+            except Exception as e:
+                result['failed'] += 1
+                result['errors'].append(f"{item.name}: {str(e)}")
+
+        return result
+
+    def _sync_bookmarks(self, item, source_path: Path, target_path: Path):
+        """同步书签"""
+        src_file = source_path / 'config' / 'bookmarks.txt'
+        dst_file = target_path / 'config' / 'bookmarks.txt'
+
+        if src_file.exists():
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dst_file)
+
+    def _sync_addon(self, item, source_path: Path, target_path: Path):
+        """同步插件"""
+        addon_name = item.name
+        src_addon = source_path / 'scripts' / 'addons' / addon_name
+        dst_addon = target_path / 'scripts' / 'addons' / addon_name
+
+        if src_addon.exists():
+            dst_addon.parent.mkdir(parents=True, exist_ok=True)
+            if src_addon.is_dir():
+                if dst_addon.exists():
+                    shutil.rmtree(dst_addon)
+                shutil.copytree(src_addon, dst_addon)
+            else:
+                shutil.copy2(src_addon, dst_addon)
+
+    def _sync_preference(self, item, source_path: Path, target_path: Path):
+        """同步偏好设置"""
+        src_file = source_path / 'config' / 'userpref.blend'
+        dst_file = target_path / 'config' / 'userpref.blend'
+
+        if src_file.exists():
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dst_file)
+
+    def _sync_preset(self, item, source_path: Path, target_path: Path):
+        """同步预设"""
+        preset_name = item.name
+        src_preset = source_path / 'scripts' / 'presets' / preset_name
+        dst_preset = target_path / 'scripts' / 'presets' / preset_name
+
+        if src_preset.exists():
+            dst_preset.parent.mkdir(parents=True, exist_ok=True)
+            if src_preset.is_dir():
+                if dst_preset.exists():
+                    shutil.rmtree(dst_preset)
+                shutil.copytree(src_preset, dst_preset)
+            else:
+                shutil.copy2(src_preset, dst_preset)
 
     @staticmethod
     def _calculate_file_hash(file_path: Path) -> str:

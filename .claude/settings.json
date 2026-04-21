@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-ant-oat01-R2PG9YhGqUsj3mqreCf9KkFRmbASOt2lf2KHKDg4PdtfC4vHQhFWD3J9leoB_patMf9a7g5D1ixWfYlpVBCpgmeT6zofxAA",
+    "ANTHROPIC_BASE_URL": "https://code.newcli.com/claude/ultra",
+    "ANTHROPIC_MODEL": "claude-opus-4-6"
+  }
+}

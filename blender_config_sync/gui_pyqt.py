@@ -665,7 +665,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
             return
         
         backups = self.backup_engine.list_backups()
-        target_backups = [b for b in backups if tgt_path and tgt_path in b.get('path', '')]
+        target_backups = [b for b in backups if tgt_path and tgt_path in b.get('source_config_path', '')]
         
         if not target_backups:
             QMessageBox.warning(
@@ -690,17 +690,28 @@ class BlenderConfigSyncPyQt(QMainWindow):
         
         self.status_label.setText(f"🔄 正在同步 {len(selected_rows)} 项到目标版本...")
         QApplication.processEvents()
-        
-        synced_count = len(selected_rows)
-        
-        QMessageBox.information(
-            self, "完成",
-            f"已标记 {synced_count} 项用于同步\n\n"
-            "实际同步功能将在下一版本实现。\n"
-            "当前版本支持导出报告手动处理。"
+
+        src_path = self.source_combo.currentData()
+        source_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == src_path), None)
+        target_inst = next((inst for inst in self.detected_versions if str(inst.config_path) == tgt_path), None)
+
+        if not source_inst or not target_inst:
+            QMessageBox.warning(self, "警告", "无法获取源或目标版本路径")
+            return
+
+        selected_items = [self.current_result.diff_items[r] for r in sorted(selected_rows)
+                          if r < len(self.current_result.diff_items)]
+
+        sync_result = self.backup_engine.sync_items(
+            selected_items, source_inst.config_path, target_inst.config_path
         )
-        
-        self.status_label.setText(f"✅ 已选择 {synced_count} 项待同步")
+
+        msg = f"同步完成：成功 {sync_result['success']} 项，跳过 {sync_result['skipped']} 项，失败 {sync_result['failed']} 项"
+        if sync_result['errors']:
+            msg += "\n\n错误详情：\n" + "\n".join(sync_result['errors'])
+
+        QMessageBox.information(self, "完成", msg)
+        self.status_label.setText(f"✅ 同步完成：{sync_result['success']} 项成功")
     
     def export_report(self):
         if not self.current_result:
