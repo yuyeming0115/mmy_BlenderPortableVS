@@ -325,7 +325,7 @@ ls -lh dist/
 | `config/bookmarks.txt` | 文件浏览器书签/收藏夹 | ✅ |
 | `config/startup.blend` | 启动时加载的默认文件 | ✅ |
 | `scripts/addons/*.py` | 用户安装的插件 | ✅（可选） |
-| `scripts/startup/*.py` | 自动执行的启动脚本 | ✅ |
+| `scripts/startup/` | 启动脚本及模板资源（含子目录 `.py`、`.blend` 等） | ✅ |
 | `scripts/presets/keyconfig/*.py` | 自定义键盘映射预设 | ✅ |
 
 ---

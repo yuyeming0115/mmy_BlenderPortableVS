@@ -309,54 +309,78 @@ class DiffEngine:
         return diffs
 
     def _compare_startup_scripts(self, source: ConfigScanner, target: ConfigScanner) -> List[DiffItem]:
-        """比较启动脚本差异"""
+        """比较启动脚本差异（包括子目录中的所有文件）"""
         diffs = []
 
         source_startup_dir = source.scripts_dir / 'startup'
         target_startup_dir = target.scripts_dir / 'startup'
 
-        source_scripts = set()
+        source_files = {}
         if source_startup_dir.exists():
-            source_scripts = {f.name for f in source_startup_dir.glob('*.py')}
+            for f in source_startup_dir.rglob('*'):
+                if f.is_file():
+                    rel_path = f.relative_to(source_startup_dir)
+                    source_files[str(rel_path)] = f
 
-        target_scripts = set()
+        target_files = {}
         if target_startup_dir.exists():
-            target_scripts = {f.name for f in target_startup_dir.glob('*.py')}
+            for f in target_startup_dir.rglob('*'):
+                if f.is_file():
+                    rel_path = f.relative_to(target_startup_dir)
+                    target_files[str(rel_path)] = f
 
-        # 仅在源端的脚本
-        for script in sorted(source_scripts - target_scripts):
+        source_set = set(source_files.keys())
+        target_set = set(target_files.keys())
+
+        # 仅在源端的文件
+        for rel_path in sorted(source_set - target_set):
             diffs.append(DiffItem(
                 category='startup_scripts',
                 item_type='script',
-                name=script,
+                name=rel_path,
                 diff_type=DiffType.ONLY_IN_SOURCE,
-                source_value=f'{source_startup_dir / script}',
+                source_value=str(source_files[rel_path]),
                 recommended_action=SyncAction.SYNC_TO_TARGET,
                 risk_level='medium',
-                details={'type': 'startup_script'}
+                details={'type': 'startup_file'}
             ))
 
-        # 仅在目标端的脚本
-        for script in sorted(target_scripts - source_scripts):
+        # 仅在目标端的文件
+        for rel_path in sorted(target_set - source_set):
             diffs.append(DiffItem(
                 category='startup_scripts',
                 item_type='script',
-                name=script,
+                name=rel_path,
                 diff_type=DiffType.ONLY_IN_TARGET,
-                target_value=f'{target_startup_dir / script}',
+                target_value=str(target_files[rel_path]),
                 recommended_action=SyncAction.KEEP_TARGET,
-                details={'type': 'startup_script'}
+                details={'type': 'startup_file'}
             ))
 
-        # 共有的脚本
-        for script in sorted(source_scripts & target_scripts):
-            diffs.append(DiffItem(
-                category='startup_scripts',
-                item_type='script',
-                name=script,
-                diff_type=DiffType.IDENTICAL,
-                recommended_action=SyncAction.SKIP
-            ))
+        # 共有的文件（检查哈希）
+        for rel_path in sorted(source_set & target_set):
+            src_hash = self._calculate_file_hash(source_files[rel_path])
+            tgt_hash = self._calculate_file_hash(target_files[rel_path])
+
+            if src_hash != tgt_hash:
+                diffs.append(DiffItem(
+                    category='startup_scripts',
+                    item_type='script',
+                    name=rel_path,
+                    diff_type=DiffType.MODIFIED,
+                    source_value={'hash': src_hash[:16]},
+                    target_value={'hash': tgt_hash[:16]},
+                    recommended_action=SyncAction.SYNC_TO_TARGET,
+                    risk_level='medium'
+                ))
+            else:
+                diffs.append(DiffItem(
+                    category='startup_scripts',
+                    item_type='script',
+                    name=rel_path,
+                    diff_type=DiffType.IDENTICAL,
+                    recommended_action=SyncAction.SKIP
+                ))
 
         return diffs
 

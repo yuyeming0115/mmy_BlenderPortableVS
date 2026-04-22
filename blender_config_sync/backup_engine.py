@@ -404,6 +404,8 @@ class BackupEngine:
                     self._sync_preference(item, source_path, target_path)
                 elif item.category == 'presets':
                     self._sync_preset(item, source_path, target_path)
+                elif item.category == 'startup_scripts':
+                    self._sync_startup_script(item, source_path, target_path)
                 else:
                     result['skipped'] += 1
                     continue
@@ -462,6 +464,15 @@ class BackupEngine:
                 shutil.copytree(src_preset, dst_preset)
             else:
                 shutil.copy2(src_preset, dst_preset)
+
+    def _sync_startup_script(self, item, source_path: Path, target_path: Path):
+        """同步启动脚本（支持子目录相对路径）"""
+        src_file = source_path / 'scripts' / 'startup' / item.name
+        dst_file = target_path / 'scripts' / 'startup' / item.name
+
+        if src_file.exists():
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dst_file)
 
     @staticmethod
     def _calculate_file_hash(file_path: Path) -> str:
