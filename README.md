@@ -295,6 +295,23 @@ pytest tests/ --cov=blender_config_sync
 - 执行打包
 - 打包完成后自动打开 dist 文件夹
 
+#### macOS 一键打包
+
+> **注意：PyInstaller 不支持跨平台编译，必须在 Mac 上执行。**
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+自动完成：
+- 检查 Python 3 环境
+- 安装 PyInstaller 依赖
+- 清理旧构建文件
+- 执行打包，输出单文件可执行程序
+
+打包产物：`dist/BlenderConfigSync`（双击或直接运行即可，无需安装 Python）
+
 #### 命令行打包
 
 ```bash
