@@ -25,6 +25,7 @@ from blender_config_sync.backup_engine import BackupEngine
 from blender_config_sync.diff_engine import (
     DiffEngine, ComparisonResult, DiffType, SyncAction, generate_text_report
 )
+from blender_config_sync.settings_manager import SettingsManager
 
 
 class BlenderConfigSyncPyQt(QMainWindow):
@@ -33,7 +34,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.setWindowTitle("🎨 Blender 配置同步工具 v0.3 (PyQt6)")
+        self.setWindowTitle("🎨 Blender 配置同步工具 v0.4 (PyQt6)")
         self.setGeometry(100, 100, 1100, 750)
         self.setMinimumSize(900, 650)
         
@@ -44,20 +45,22 @@ class BlenderConfigSyncPyQt(QMainWindow):
         self.path_manager = BlenderPathManager()
         self.backup_engine = BackupEngine()
         self.diff_engine = DiffEngine()
-        
+        self.settings_manager = SettingsManager()
+
         # 数据存储
         self.source_version_var = ""
         self.target_version_var = ""
         self.current_result: Optional[ComparisonResult] = None
         self.detected_versions: List[BlenderInstallation] = []
-        
+
         # 创建 UI
         self._create_menu_bar()
         self._create_central_widget()
         self._create_status_bar()
-        
-        # 显示欢迎信息
+
+        # 显示欢迎信息并恢复上次路径
         QTimer.singleShot(100, self._show_welcome)
+        QTimer.singleShot(200, self._restore_last_paths)
     
     def _setup_style(self):
         """设置应用样式"""
@@ -430,7 +433,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
         welcome_text = """
 ╔════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   🎨 Blender 配置同步工具 v0.3 (PyQt6 版)                  ║
+║   🎨 Blender 配置同步工具 v0.4 (PyQt6 版)                  ║
 ║                                                              ║
 ║   欢迎使用！本工具可以帮助你：                               ║
 ║   • 检测已安装的 Blender 版本                                ║
@@ -1253,37 +1256,54 @@ class BlenderConfigSyncPyQt(QMainWindow):
         
         return (False, None, None)
     
-    def _add_custom_path(self, target_type: str, path: Path, version: str):
-        """添加自定义路径到下拉框"""
+    def _add_custom_path(self, target_type: str, path: Path, version: str, save: bool = True):
+        """添加自定义路径到下拉框
+
+        Args:
+            target_type: 'source' 或 'target'
+            path: 配置路径
+            version: Blender版本号
+            save: 是否保存到配置文件（恢复历史路径时为False）
+        """
         combo = self.source_combo if target_type == 'source' else self.target_combo
         label = self.source_path_label if target_type == 'source' else self.target_path_label
-        
+
         display_text = f"Blender {version} (自定义)"
         existing_index = combo.findText(display_text)
-        
+
         if existing_index < 0:
             combo.addItem(display_text, str(path))
             combo.setCurrentIndex(combo.count() - 1)
         else:
             combo.setCurrentIndex(existing_index)
-        
+
         # 更新路径标签显示
         label.setText(f"✅ {path}")
         label.setStyleSheet("color: #4CAF50; font-size: 11px;")
-        
+
         # 存储到 detected_versions 列表
         custom_install = BlenderInstallation(
             version=version,
             config_path=path,
             is_portable=True
         )
-        
+
         # 避免重复添加
         exists = any(inst.config_path == path for inst in self.detected_versions)
         if not exists:
             self.detected_versions.append(custom_install)
-        
+
         self.status_label.setText(f"✅ 已添加 {target_type} 版本: Blender {version}")
+
+        # 保存到配置文件
+        if save:
+            self.settings_manager.add_saved_path(str(path), version, "portable")
+            self.settings_manager.update_last_paths(
+                source_path=str(path) if target_type == 'source' else None,
+                source_version=version if target_type == 'source' else None,
+                target_path=str(path) if target_type == 'target' else None,
+                target_version=version if target_type == 'target' else None
+            )
     
     # ========== 浏览功能 ==========
     def browse_blender_path(self, target_type: str):
@@ -1348,7 +1368,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
     
     def show_about(self):
         about_text = """
-<h2>🎨 Blender 配置同步工具 v0.3</h2>
+<h2>🎨 Blender 配置同步工具 v0.4</h2>
 <p><b>PyQt6 版本</b></p>
 <hr>
 <p>一款专业的 Blender 个人配置管理工具，帮助你轻松在不同版本间同步收藏夹、快捷键、插件等配置。</p>
@@ -1361,6 +1381,7 @@ class BlenderConfigSyncPyQt(QMainWindow):
 <li>✅ 跨版本配置差异比较</li>
 <li>✅ 插件兼容性检查</li>
 <li>✅ 选择性同步功能</li>
+<li>✅ <b>路径记忆功能</b> - 自动恢复上次使用的路径</li>
 </ul>
 
 <h3>技术栈</h3>
@@ -1376,6 +1397,65 @@ class BlenderConfigSyncPyQt(QMainWindow):
         msg.setTextFormat(Qt.RichText)
         msg.setText(about_text)
         msg.exec()
+
+    def _restore_last_paths(self):
+        """恢复上次使用的路径"""
+        # 尝试恢复上次保存的路径
+        last_source = self.settings_manager.get_last_source()
+        last_target = self.settings_manager.get_last_target()
+
+        if last_source and Path(last_source.path).exists():
+            self._add_custom_path('source', Path(last_source.path), last_source.version, save=False)
+            self.status_label.setText("✅ 已恢复上次的源路径")
+
+        if last_target and Path(last_target.path).exists():
+            self._add_custom_path('target', Path(last_target.path), last_target.version, save=False)
+            if last_source:
+                self.status_label.setText("✅ 已恢复上次的源和目标路径")
+
+        # 恢复保存的历史路径
+        for saved in self.settings_manager.get_saved_paths():
+            if Path(saved.path).exists():
+                # 只添加到列表，不设置当前选项
+                self._add_path_to_history(saved.path, saved.version)
+
+    def _add_path_to_history(self, path: str, version: str):
+        """添加路径到历史记录（不设置当前选项）"""
+        # 添加到 detected_versions 以便后续使用
+        custom_install = BlenderInstallation(
+            version=version,
+            config_path=Path(path),
+            is_portable=True
+        )
+
+        exists = any(inst.config_path == Path(path) for inst in self.detected_versions)
+        if not exists:
+            self.detected_versions.append(custom_install)
+
+    def closeEvent(self, event):
+        """窗口关闭时保存设置"""
+        # 保存当前源和目标路径
+        src_path = self.source_combo.currentData()
+        tgt_path = self.target_combo.currentData()
+        src_version = self.source_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
+        tgt_version = self.target_combo.currentText().replace("Blender ", "").replace(" (自定义)", "")
+
+        if src_path:
+            self.settings_manager.update_last_paths(
+                source_path=src_path,
+                source_version=src_version,
+                source_index=self.source_combo.currentIndex()
+            )
+
+        if tgt_path:
+            self.settings_manager.update_last_paths(
+                target_path=tgt_path,
+                target_version=tgt_version,
+                target_index=self.target_combo.currentIndex()
+            )
+
+        self.settings_manager.save_settings()
+        event.accept()
 
 
 def main():
