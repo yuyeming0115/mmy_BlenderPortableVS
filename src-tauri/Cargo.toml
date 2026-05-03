@@ -1,0 +1,28 @@
+[package]
+name = "blender-config-sync"
+version = "1.0.0"
+description = "Blender 配置同步工具"
+authors = ["MMY"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = "2"
+sha2 = "0.10"
+hex = "0.4"
+walkdir = "2"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+log = "0.4"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-autostart = "2"
