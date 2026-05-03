@@ -161,3 +161,7 @@ logs/
 # 临时文件
 tmp/
 temp/
+
+# Claude Code 配置
+.claude/
+CLAUDE.md
