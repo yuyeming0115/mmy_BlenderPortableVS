@@ -179,7 +179,6 @@ function renderFileName(entry: any) {
   const fileName = relPath.split('/').pop() || relPath
   const dirPath = relPath.substring(0, relPath.lastIndexOf('/') + 1)
 
-  const label = getStatusLabel(entry.diff_type)
   let fileColor: string | undefined
 
   if (entry.diff_type === 'OnlyInSource') {
@@ -199,26 +198,14 @@ function renderFileName(entry: any) {
   return relPath
 }
 
-// 全选/取消全选
-function toggleSelectAll() {
-  if (!store.folderDiffResult) return
-  if (store.checkedPaths.size === store.folderDiffResult.entries.length) {
-    store.checkedPaths.clear()
-  } else {
-    for (const entry of store.folderDiffResult.entries) {
-      store.checkedPaths.add(entry.rel_path)
-    }
-  }
-}
 
 const checkedCount = computed(() => store.checkedPaths.size)
-const totalCount = computed(() => store.folderDiffResult?.entries.length || 0)
 
 // 加入预览清单
 function addToPreview() {
   if (!store.folderDiffResult || store.checkedPaths.size === 0) return
   // 将勾选项传入 store.pendingPreviewItems
-  store.pendingPreviewItems.value = store.folderDiffResult.entries
+  store.pendingPreviewItems = store.folderDiffResult.entries
     .filter(e => store.checkedPaths.has(e.rel_path))
     .map(e => ({
       _path: e.rel_path,

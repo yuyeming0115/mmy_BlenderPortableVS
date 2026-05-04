@@ -400,7 +400,7 @@ onUnmounted(() => {
 function clearAll() {
   store.autoCheckDone = false
   store.checkedPaths.clear()
-  store.pendingPreviewItems.value = []
+  store.pendingPreviewItems = []
   store.clearAll()
 }
 
@@ -442,7 +442,7 @@ async function doCompare() {
     return
   }
   // 将勾选项传入 store
-  store.pendingPreviewItems.value = unifiedRows.value
+  store.pendingPreviewItems = unifiedRows.value
     .filter(r => store.checkedPaths.has(r._path))
     .map(r => ({
       _path: r._path,
@@ -510,21 +510,6 @@ function handleRowClick(row: UnifiedRow, event: MouseEvent) {
 }
 
 // 全选/取消全选
-function toggleSelectAll() {
-  if (checkedCount.value === unifiedRows.value.length) {
-    store.checkedPaths.clear()
-  } else {
-    for (const row of unifiedRows.value) {
-      store.checkedPaths.add(row._path)
-    }
-  }
-}
-
-const checkboxColTitle = computed(() =>
-  h('span', { style: { cursor: 'pointer' } },
-    checkedCount.value === unifiedRows.value.length && unifiedRows.value.length > 0 ? '☑' : '☐'))
-
-// 渲染文件名：单侧独有的文件染对应颜色
 function renderFileName(row: UnifiedRow) {
   const path = row._path
   const fileName = row._file
