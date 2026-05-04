@@ -38,7 +38,7 @@ async function doTransfer() {
       name: item.name,
       action: item.recommended_action || 'SyncToTarget',
     }))
-    await store.executeSync(items, '', '')
+    await store.executeSync(items, store.pathA, store.pathB)
     if (store.transferResult) {
       msg.success(`传输完成！成功: ${store.transferResult.success_count}, 失败: ${store.transferResult.failed_count}, 跳过: ${store.transferResult.skipped_count}`)
       store.selectedSyncItems = []
@@ -58,6 +58,19 @@ async function doTransfer() {
       <n-button type="primary" :loading="executing" :disabled="store.selectedSyncItems.length === 0" @click="doTransfer">
         {{ t('transfer_start') }}
       </n-button>
+    </div>
+
+    <!-- 传输方向提示 -->
+    <div v-if="store.pathA && store.pathB" class="transfer-direction-bar">
+      <span class="dir-side">
+        <span class="dir-badge dir-badge-a">A</span>
+        <span class="dir-path" :title="store.pathA">{{ store.pathA }}</span>
+      </span>
+      <span class="dir-arrow">➡️</span>
+      <span class="dir-side">
+        <span class="dir-badge dir-badge-b">B</span>
+        <span class="dir-path" :title="store.pathB">{{ store.pathB }}</span>
+      </span>
     </div>
 
     <div class="transfer-list">
@@ -118,6 +131,75 @@ body:not(.dark) .page-header {
 .page-title {
   font-size: 16px;
   font-weight: 700;
+}
+
+.transfer-direction-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+body:not(.dark) .transfer-direction-bar {
+  border-bottom-color: #ddd;
+}
+
+.dir-label, .dir-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dir-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.dir-badge-a {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+body:not(.dark) .dir-badge-a {
+  background: rgba(255, 152, 0, 0.1);
+  color: #e65100;
+  border-color: rgba(255, 152, 0, 0.25);
+}
+
+.dir-badge-b {
+  background: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+body:not(.dark) .dir-badge-b {
+  background: rgba(33, 150, 243, 0.1);
+  color: #1565c0;
+  border-color: rgba(33, 150, 243, 0.25);
+}
+
+.dir-path {
+  color: #aaa;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body:not(.dark) .dir-path {
+  color: #666;
+}
+
+.dir-arrow {
+  color: #64b5f6;
+  font-size: 16px;
 }
 
 .transfer-list {

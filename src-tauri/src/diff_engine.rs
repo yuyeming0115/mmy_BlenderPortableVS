@@ -71,6 +71,7 @@ pub struct RiskCounts {
     pub medium: usize,
 }
 
+#[allow(dead_code)]
 const CATEGORIES: [(&str, &str, &str); 6] = [
     ("bookmarks", "文件浏览器书签", "收藏夹路径列表"),
     ("addons", "已安装插件", "Python 插件及其启用状态"),

@@ -85,7 +85,7 @@ fn get_backup_dir() -> PathBuf {
 }
 
 /// 创建配置备份
-pub fn create_backup(config_path: &str, version: &str, include_addons: bool) -> std::io::Result<BackupResult> {
+pub fn create_backup(config_path: &str, version: &str, include_addons: bool, output_dir: Option<&str>) -> std::io::Result<BackupResult> {
     let config_path_buf = PathBuf::from(config_path);
     if !config_path_buf.exists() {
         return Ok(BackupResult {
@@ -97,7 +97,11 @@ pub fn create_backup(config_path: &str, version: &str, include_addons: bool) -> 
         });
     }
 
-    let backup_dir = get_backup_dir();
+    // 优先使用用户指定的输出目录，否则使用默认目录
+    let backup_dir = match output_dir {
+        Some(dir) => PathBuf::from(dir),
+        None => get_backup_dir(),
+    };
     fs::create_dir_all(&backup_dir)?;
 
     // 解析版本号，只保留主版本和次版本
@@ -247,9 +251,53 @@ fn calculate_file_hash(path: &PathBuf) -> std::io::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// 诊断信息：返回当前扫描的目录和找到的 ZIP 文件
+pub fn diagnose_backups(backup_dir_override: Option<&str>) -> std::io::Result<serde_json::Value> {
+    let backup_dir = match backup_dir_override {
+        Some(dir) => PathBuf::from(dir),
+        None => get_backup_dir(),
+    };
+    let mut result = serde_json::Map::new();
+    result.insert("scanned_dir".to_string(), serde_json::Value::String(backup_dir.to_string_lossy().to_string()));
+    result.insert("dir_exists".to_string(), serde_json::Value::Bool(backup_dir.exists()));
+
+    let mut zip_files = Vec::new();
+    if backup_dir.exists() {
+        for entry in fs::read_dir(&backup_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let ext = path.extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
+            if ext == "zip" {
+                let metadata = fs::metadata(&path)?;
+                let mut file_info = serde_json::Map::new();
+                file_info.insert("name".to_string(), serde_json::Value::String(path.file_name().unwrap_or_default().to_string_lossy().to_string()));
+                file_info.insert("size_bytes".to_string(), serde_json::Value::Number(serde_json::Number::from(metadata.len())));
+                zip_files.push(serde_json::Value::Object(file_info));
+            }
+        }
+    }
+    result.insert("zip_files".to_string(), serde_json::Value::Array(zip_files.clone()));
+    result.insert("zip_count".to_string(), serde_json::Value::Number(serde_json::Number::from(zip_files.len())));
+
+    // 测试读取第一个 ZIP 的 manifest
+    if let Some(first) = zip_files.first() {
+        let name = first.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if !name.is_empty() {
+            let zip_path = backup_dir.join(name);
+            let manifest_ok = read_manifest(&zip_path).is_ok();
+            result.insert("first_manifest_ok".to_string(), serde_json::Value::Bool(manifest_ok));
+        }
+    }
+
+    Ok(serde_json::Value::Object(result))
+}
+
 /// 列出所有备份
-pub fn list_backups() -> std::io::Result<Vec<BackupInfo>> {
-    let backup_dir = get_backup_dir();
+pub fn list_backups(backup_dir_override: Option<&str>) -> std::io::Result<Vec<BackupInfo>> {
+    let backup_dir = match backup_dir_override {
+        Some(dir) => PathBuf::from(dir),
+        None => get_backup_dir(),
+    };
     if !backup_dir.exists() {
         return Ok(Vec::new());
     }
@@ -334,7 +382,7 @@ pub fn restore_backup(backup_path: &str, target_path: &str, overwrite: bool) -> 
 
     let mut restored_count = 0usize;
     let mut skipped_count = 0usize;
-    let mut errors = Vec::new();
+    let errors: Vec<String> = Vec::new();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
@@ -411,6 +459,7 @@ fn sync_single_item(item: &SyncItemInput, source: &PathBuf, target: &PathBuf) ->
         "preferences" => sync_preferences(source, target),
         "presets" => sync_preset(&item.name, &item.item_type, source, target),
         "startup_scripts" => sync_startup_script(&item.name, source, target),
+        "folder_file" => sync_generic_file_or_dir(&item.name, source, target),
         _ => Ok(false),
     }
 }
@@ -512,4 +561,28 @@ fn sync_startup_script(name: &str, source: &PathBuf, target: &PathBuf) -> std::i
     } else {
         Ok(false)
     }
+}
+
+/// 通用文件/目录同步（用于文件夹差异模块）
+fn sync_generic_file_or_dir(rel_path: &str, source: &PathBuf, target: &PathBuf) -> std::io::Result<bool> {
+    let src = source.join(rel_path);
+    let dst = target.join(rel_path);
+
+    if !src.exists() {
+        return Ok(false);
+    }
+
+    if src.is_dir() {
+        if dst.exists() {
+            fs::remove_dir_all(&dst)?;
+        }
+        copy_dir_all(&src, &dst)?;
+    } else {
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(&src, &dst)?;
+    }
+
+    Ok(true)
 }

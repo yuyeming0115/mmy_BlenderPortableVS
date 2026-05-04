@@ -3,17 +3,18 @@ import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import { i18n } from '../i18n'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import DirectoryPanel from './DirectoryPanel.vue'
 import PreviewPage from './PreviewPage.vue'
 import BackupPage from './BackupPage.vue'
 import TransferPage from './TransferPage.vue'
+import FolderDiffPage from './FolderDiffPage.vue'
 
 const { t } = useI18n()
 const store = useAppStore()
 
-type PageType = 'main' | 'preview' | 'backup' | 'transfer'
+type PageType = 'main' | 'preview' | 'backup' | 'transfer' | 'folderDiff'
 const currentPage = ref<PageType>('main')
 const isDark = defineModel<boolean>('isDark', { default: true })
 const appWindow = getCurrentWindow()
@@ -36,25 +37,69 @@ onMounted(async () => {
   await store.init()
   i18n.global.locale.value = store.config.language as 'zh' | 'en'
   try {
-    const saved = await invoke<{ isDark?: boolean } | null>('get_window_state')
-    if (saved && typeof saved.isDark === 'boolean') {
-      isDark.value = saved.isDark
+    const saved = await invoke<{ isDark?: boolean; maximized?: boolean; width?: number; height?: number } | null>('get_window_state')
+    if (saved) {
+      if (typeof saved.isDark === 'boolean') isDark.value = saved.isDark
+      if (saved.width && saved.height) {
+        await appWindow.setSize(new LogicalSize(saved.width, saved.height))
+      }
+      if (saved.maximized) {
+        await appWindow.maximize()
+      }
     }
   } catch { }
+
+  // 监听导航事件
+  window.addEventListener('navigate', (e: Event) => {
+    const detail = (e as CustomEvent<string>).detail
+    currentPage.value = detail as PageType
+  })
+
+  // 监听窗口尺寸变化并保存
+  appWindow.onResized(async () => {
+    try {
+      const size = await appWindow.innerSize()
+      const maxed = await appWindow.isMaximized()
+      await invoke('save_window_state', {
+        isDark: isDark.value,
+        width: maxed ? null : size.width,
+        height: maxed ? null : size.height,
+        maximized: maxed,
+      })
+    } catch { }
+  })
 })
 
 watch(isDark, async (val) => {
   try {
-    await invoke('save_window_state', { isDark: val })
+    const size = await appWindow.innerSize()
+    const maxed = await appWindow.isMaximized()
+    await invoke('save_window_state', {
+      isDark: val,
+      width: maxed ? null : size.width,
+      height: maxed ? null : size.height,
+      maximized: maxed,
+    })
   } catch { }
 })
 
 async function toggleMax() {
-  if (await appWindow.isMaximized()) {
-    await appWindow.unmaximize()
-  } else {
-    await appWindow.maximize()
-  }
+  try {
+    if (await appWindow.isMaximized()) {
+      await appWindow.unmaximize()
+    } else {
+      await appWindow.maximize()
+    }
+    // 保存最大化状态
+    const size = await appWindow.innerSize()
+    const maxed = await appWindow.isMaximized()
+    await invoke('save_window_state', {
+      isDark: isDark.value,
+      width: maxed ? null : size.width,
+      height: maxed ? null : size.height,
+      maximized: maxed,
+    })
+  } catch { }
 }
 
 async function doCloseWindow() {
@@ -97,14 +142,16 @@ function toggleLang() {
       <div class="sidebar" @mousedown="startWindowDrag">
         <button
           class="nav-btn"
-          :class="{ active: currentPage === 'main', 'has-version': !!store.versionA }"
+          :class="{ 'has-version': !!store.versionA }"
+          :title="store.versionA ? '' : '可拖入 Blender 配置文件夹到此处'"
           @click="navigate('main')"
         >
           <span class="nav-label">{{ store.versionA ? `A · ${store.versionA}` : t('nav_drag_a') }}</span>
         </button>
         <button
           class="nav-btn"
-          :class="{ active: currentPage === 'main', 'has-version': !!store.versionB }"
+          :class="{ 'has-version': !!store.versionB }"
+          :title="store.versionB ? '' : '可拖入 Blender 配置文件夹到此处'"
           @click="navigate('main')"
         >
           <span class="nav-label">{{ store.versionB ? `B · ${store.versionB}` : t('nav_drag_b') }}</span>
@@ -112,10 +159,17 @@ function toggleLang() {
         <div class="nav-divider"></div>
         <button
           class="nav-btn"
-          :class="{ active: currentPage === 'preview' }"
-          @click="navigate('preview')"
+          :class="{ active: currentPage === 'main' }"
+          @click="navigate('main')"
         >
-          <span class="nav-label">{{ t('nav_preview') }}</span>
+          <span class="nav-label">{{ t('nav_blender') }}</span>
+        </button>
+        <button
+          class="nav-btn"
+          :class="{ active: currentPage === 'folderDiff' }"
+          @click="navigate('folderDiff')"
+        >
+          <span class="nav-label">{{ t('nav_folder_diff') }}</span>
         </button>
         <button
           class="nav-btn"
@@ -123,6 +177,13 @@ function toggleLang() {
           @click="navigate('backup')"
         >
           <span class="nav-label">{{ t('nav_backup') }}</span>
+        </button>
+        <button
+          class="nav-btn"
+          :class="{ active: currentPage === 'preview' }"
+          @click="navigate('preview')"
+        >
+          <span class="nav-label">{{ t('nav_preview') }}</span>
         </button>
         <button
           class="nav-btn"
@@ -144,9 +205,12 @@ function toggleLang() {
       <!-- 内容区域 -->
       <div class="content-area">
         <!-- 主页面：A/B 双栏 -->
-        <DirectoryPanel
-          v-if="currentPage === 'main'"
-        />
+        <div v-if="currentPage === 'main'" class="main-page-wrapper">
+          <div class="main-page-header">
+            <span class="main-page-title">Blender 配置传输</span>
+          </div>
+          <DirectoryPanel />
+        </div>
         <!-- 预览清单 -->
         <PreviewPage
           v-if="currentPage === 'preview'"
@@ -158,6 +222,10 @@ function toggleLang() {
         <!-- 传输 -->
         <TransferPage
           v-if="currentPage === 'transfer'"
+        />
+        <!-- 文件夹对比 -->
+        <FolderDiffPage
+          v-if="currentPage === 'folderDiff'"
         />
       </div>
     </div>
@@ -238,10 +306,6 @@ body:not(.dark) .nav-btn.has-version {
   background: rgba(76, 175, 80, 0.1);
   color: #2e7d32;
 }
-.nav-btn.has-version.active {
-  background: rgba(33, 150, 243, 0.2);
-  color: #64b5f6;
-}
 .nav-label {
   display: block;
   word-break: break-all;
@@ -265,5 +329,27 @@ body:not(.dark) .nav-divider {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+.main-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main-page-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #444;
+  flex-shrink: 0;
+}
+body:not(.dark) .main-page-header {
+  border-bottom-color: #ddd;
+}
+
+.main-page-title {
+  font-size: 16px;
+  font-weight: 700;
 }
 </style>

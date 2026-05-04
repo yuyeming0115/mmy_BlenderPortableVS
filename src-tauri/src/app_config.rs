@@ -9,6 +9,8 @@ pub struct AppConfig {
     pub language: String,
     pub backup_dir: Option<String>,
     pub auto_detect_on_startup: bool,
+    pub last_path_a: Option<String>,
+    pub last_path_b: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -17,6 +19,8 @@ impl Default for AppConfig {
             language: "zh".to_string(),
             backup_dir: None,
             auto_detect_on_startup: true,
+            last_path_a: None,
+            last_path_b: None,
         }
     }
 }
@@ -59,9 +63,14 @@ pub fn save_app_config(config: &AppConfig) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn save_window_state(is_dark: bool) -> std::io::Result<()> {
+pub fn save_window_state(is_dark: bool, width: Option<u32>, height: Option<u32>, maximized: bool) -> std::io::Result<()> {
     let path = get_config_dir().join("window_state.json");
-    let state = serde_json::json!({ "is_dark": is_dark });
+    let state = serde_json::json!({
+        "is_dark": is_dark,
+        "maximized": maximized,
+        "width": width,
+        "height": height,
+    });
     fs::write(path, serde_json::to_string(&state)?)?;
     Ok(())
 }

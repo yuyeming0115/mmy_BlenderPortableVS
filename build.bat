@@ -1,58 +1,61 @@
 @echo off
 chcp 65001 >nul
+setlocal enabledelayedexpansion
+
 echo.
 echo ============================================================
-echo   Blender Config Sync - 一键打包工具
+echo   Blender Config Sync - 一键打包 (Windows)
 echo ============================================================
 echo.
 
-:: 检查 Python
-python --version >nul 2>&1
+:: 检查 Node.js
+node --version >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请先安装 Python 3.9+
-    echo   下载地址: https://www.python.org/downloads/
+    echo [错误] 未找到 Node.js，请先安装 Node.js 18+
+    echo   下载地址: https://nodejs.org/
     pause
     exit /b 1
 )
 
+:: 进入项目目录
+cd /d "%~dp0"
+
 :: 安装依赖
-echo [1/3] 检查 PyInstaller...
-pip show pyinstaller >nul 2>&1
+echo [1/3] 安装依赖...
+call npm install
+
+:: 构建前端 + 打包
+echo.
+echo [2/3] 构建前端...
+call npm run build
 if errorlevel 1 (
-    echo [安装] 正在安装 PyInstaller...
-    pip install pyinstaller PyQt6
-)
-
-:: 清理旧文件
-echo.
-echo [2/3] 清理旧构建文件...
-if exist build rmdir /s /q build
-if exist dist rmdir /s /q dist
-
-:: 执行打包
-echo.
-echo [3/3] 开始打包...
-echo ------------------------------------------------------------
-python -m PyInstaller --clean --noconfirm blender_config_sync.spec
-
-:: 检查结果
-echo.
-if exist dist\BlenderConfigSync.exe (
-    echo ============================================================
-    echo   打包成功！
-    echo ============================================================
-    echo.
-    echo   文件位置: %~dp0dist\BlenderConfigSync.exe
-    for %%A in (dist\BlenderConfigSync.exe) do echo   文件大小: %%~zA bytes
-    echo.
-    echo   按任意键打开 dist 文件夹...
-    pause >nul
-    explorer dist
-) else (
-    echo ============================================================
-    echo   打包失败！
-    echo ============================================================
-    echo.
-    echo   请检查上方错误信息
+    echo [错误] 前端构建失败
     pause
+    exit /b 1
 )
+
+:: Tauri 打包
+echo.
+echo [3/3] 打包 Windows NSIS 安装版...
+echo ------------------------------------------------------------
+call npx tauri build --bundles nsis
+
+:: 复制结果
+echo.
+echo ============================================================
+echo   打包完成！
+echo ============================================================
+echo.
+
+mkdir dist 2>nul
+set OUTDIR=src-tauri\target\release\bundle\nsis
+for %%F in (%OUTDIR%\*.exe) do (
+    copy "%%F" dist\ >nul
+    echo   已复制: %%~nxF
+    for %%A in ("dist\%%~nxF") do echo   大小: %%~zA bytes
+)
+
+echo.
+echo   按任意键打开 dist 文件夹...
+pause >nul
+explorer dist

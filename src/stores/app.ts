@@ -185,6 +185,52 @@ export const useAppStore = defineStore('app', () => {
 
   // 选中同步的项
   const selectedSyncItems = ref<DiffItem[]>([])
+  // 主页面勾选的文件路径集合（跨页面持久化）
+  const checkedPaths = ref<Set<string>>(new Set())
+  // 是否已完成过自动勾选初始化（跨页面持久化，避免切换页面后重新自动勾选）
+  const autoCheckDone = ref(false)
+  // 收藏夹路径列表
+  const favoritePaths = ref<string[]>([])
+  // 预览清单的选中项（来自对比页）
+  interface PendingItem {
+    _path: string
+    a_time: string
+    b_time: string
+    a_status: string
+    b_status: string
+  }
+  const pendingPreviewItems = ref<PendingItem[]>([])
+
+  // ===== 文件夹差异对比 =====
+  interface FolderDiffEntry {
+    rel_path: string
+    diff_type: string
+    a_time: string | null
+    b_time: string | null
+    a_size: number
+    b_size: number
+    is_dir: boolean
+    checked?: boolean
+  }
+
+  interface FolderDiffResult {
+    source_path: string
+    target_path: string
+    scan_time: string
+    entries: FolderDiffEntry[]
+    summary: {
+      total_a: number
+      total_b: number
+      only_in_source: number
+      only_in_target: number
+      modified: number
+      same: number
+    }
+  }
+
+  const folderDiffResult = ref<FolderDiffResult | null>(null)
+  const folderPathA = ref('')
+  const folderPathB = ref('')
 
   // 传输结果
   const transferResult = ref<SyncResult | null>(null)
@@ -194,6 +240,12 @@ export const useAppStore = defineStore('app', () => {
     await invoke('init_app')
     await loadConfig()
     await detectVersions()
+    // 恢复上次的路径（仅显示路径，不验证版本号——版本号在扫描后才显示）
+    try {
+      const last = await invoke<{ last_path_a?: string; last_path_b?: string }>('get_last_paths')
+      if (last.last_path_a) pathA.value = last.last_path_a
+      if (last.last_path_b) pathB.value = last.last_path_b
+    } catch { }
   }
 
   // ===== 配置 =====
@@ -217,22 +269,20 @@ export const useAppStore = defineStore('app', () => {
   // ===== 配置扫描 =====
   async function scanPathA(path: string) {
     pathA.value = path
-    // 先验证获取版本号
     const validation = await invoke<PathValidation>('validate_custom_path', { path })
     versionA.value = validation.version || ''
-    // 再扫描
     scanResultA.value = await invoke<ScanResult>('scan_all_configs', { configPath: path })
     dirEntriesA.value = await invoke<DirectoryEntry[]>('scan_directory_tree', { dirPath: path })
+    await saveLastPaths()
   }
 
   async function scanPathB(path: string) {
     pathB.value = path
-    // 先验证获取版本号
     const validation = await invoke<PathValidation>('validate_custom_path', { path })
     versionB.value = validation.version || ''
-    // 再扫描
     scanResultB.value = await invoke<ScanResult>('scan_all_configs', { configPath: path })
     dirEntriesB.value = await invoke<DirectoryEntry[]>('scan_directory_tree', { dirPath: path })
+    await saveLastPaths()
   }
 
   /** 仅更新路径和版本号（拖放验证后调用） */
@@ -244,6 +294,53 @@ export const useAppStore = defineStore('app', () => {
       pathB.value = path
       versionB.value = version
     }
+  }
+
+  /** 持久化路径到本地配置 */
+  async function saveLastPaths() {
+    await invoke('save_last_paths', {
+      lastPathA: pathA.value || null,
+      lastPathB: pathB.value || null,
+    })
+  }
+
+  // ===== 收藏夹 =====
+  function loadFavorites() {
+    try {
+      const saved = localStorage.getItem('mmy_favorites')
+      if (saved) favoritePaths.value = JSON.parse(saved)
+    } catch { }
+  }
+
+  function saveFavorites() {
+    localStorage.setItem('mmy_favorites', JSON.stringify(favoritePaths.value))
+  }
+
+  function toggleFavorite(path: string) {
+    const idx = favoritePaths.value.indexOf(path)
+    if (idx >= 0) {
+      favoritePaths.value.splice(idx, 1)
+    } else {
+      favoritePaths.value.push(path)
+    }
+    saveFavorites()
+  }
+
+  function isFavorite(path: string) {
+    return favoritePaths.value.includes(path)
+  }
+
+  /** 清空所有路径和扫描结果 */
+  function clearAll() {
+    pathA.value = ''
+    pathB.value = ''
+    versionA.value = ''
+    versionB.value = ''
+    scanResultA.value = null
+    scanResultB.value = null
+    dirEntriesA.value = []
+    dirEntriesB.value = []
+    saveLastPaths()
   }
 
   // ===== 差异比较 =====
@@ -259,6 +356,8 @@ export const useAppStore = defineStore('app', () => {
       sourceVersion,
       targetVersion,
     })
+    // 清空旧的选择
+    selectedSyncItems.value = []
   }
 
   // ===== 书签 =====
@@ -272,16 +371,21 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // ===== 备份 =====
-  async function createBackup(configPath: string, version: string, includeAddons: boolean) {
+  async function createBackup(configPath: string, version: string, includeAddons: boolean, outputDir?: string) {
     return await invoke<BackupResult>('create_backup', {
       configPath,
       version,
       includeAddons,
+      outputDir: outputDir || null,
     })
   }
 
   async function loadBackups() {
     backups.value = await invoke<BackupInfo[]>('list_backups')
+  }
+
+  async function diagnoseBackups() {
+    return await invoke<any>('diagnose_backups')
   }
 
   async function deleteBackupItem(path: string) {
@@ -293,6 +397,24 @@ export const useAppStore = defineStore('app', () => {
       backupPath,
       targetPath,
       overwrite,
+    })
+  }
+
+  // ===== 文件夹差异对比 =====
+  async function scanAndDiffFolders(sourcePath: string, targetPath: string) {
+    folderPathA.value = sourcePath
+    folderPathB.value = targetPath
+    folderDiffResult.value = await invoke<FolderDiffResult>('diff_dirs', {
+      sourcePath,
+      targetPath,
+    })
+  }
+
+  async function syncFolderDiffItems(items: any[], sourcePath: string, targetPath: string) {
+    transferResult.value = await invoke<SyncResult>('sync_dir_items', {
+      items,
+      sourcePath,
+      targetPath,
     })
   }
 
@@ -332,7 +454,14 @@ export const useAppStore = defineStore('app', () => {
     comparisonResult,
     backups,
     selectedSyncItems,
+    checkedPaths,
+    autoCheckDone,
+    favoritePaths,
+    pendingPreviewItems,
     transferResult,
+    folderDiffResult,
+    folderPathA,
+    folderPathB,
     init,
     loadConfig,
     saveConfig,
@@ -341,15 +470,24 @@ export const useAppStore = defineStore('app', () => {
     scanPathA,
     scanPathB,
     setSideVersion,
+    saveLastPaths,
+    loadFavorites,
+    saveFavorites,
+    toggleFavorite,
+    isFavorite,
+    clearAll,
     comparePaths,
     getBookmarks,
     getAddons,
     createBackup,
     loadBackups,
+    diagnoseBackups,
     deleteBackupItem,
     restoreBackupItem,
     executeSync,
     saveWindowState,
     loadWindowState,
+    scanAndDiffFolders,
+    syncFolderDiffItems,
   }
 })

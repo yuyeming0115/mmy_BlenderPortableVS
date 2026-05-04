@@ -11,10 +11,9 @@ mod config_scanner;
 mod backup_engine;
 mod diff_engine;
 mod app_config;
+mod dir_diff;
 
 use app_config::{AppConfig, load_app_config, save_app_config as save_config_to_file};
-
-const APP_NAME: &str = "Blender Config Sync";
 
 // ===== 应用初始化 =====
 
@@ -34,6 +33,25 @@ fn get_app_config() -> Result<AppConfig, String> {
 #[tauri::command]
 fn save_app_config(cfg: AppConfig) -> Result<(), String> {
     save_config_to_file(&cfg).map_err(|e| e.to_string())
+}
+
+// ===== 路径记忆 =====
+
+#[tauri::command]
+fn save_last_paths(last_path_a: Option<String>, last_path_b: Option<String>) -> Result<(), String> {
+    let mut cfg = load_app_config().map_err(|e| e.to_string())?;
+    cfg.last_path_a = last_path_a;
+    cfg.last_path_b = last_path_b;
+    save_config_to_file(&cfg).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_last_paths() -> Result<serde_json::Value, String> {
+    let cfg = load_app_config().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "last_path_a": cfg.last_path_a,
+        "last_path_b": cfg.last_path_b,
+    }))
 }
 
 // ===== 版本检测 =====
@@ -79,13 +97,23 @@ fn create_backup(
     config_path: String,
     version: String,
     include_addons: bool,
+    output_dir: Option<String>,
 ) -> Result<backup_engine::BackupResult, String> {
-    backup_engine::create_backup(&config_path, &version, include_addons).map_err(|e| e.to_string())
+    backup_engine::create_backup(&config_path, &version, include_addons, output_dir.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn list_backups() -> Result<Vec<backup_engine::BackupInfo>, String> {
-    backup_engine::list_backups().map_err(|e| e.to_string())
+    let cfg = load_app_config().map_err(|e| e.to_string())?;
+    let backup_dir = cfg.backup_dir.as_deref();
+    backup_engine::list_backups(backup_dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn diagnose_backups() -> Result<serde_json::Value, String> {
+    let cfg = load_app_config().map_err(|e| e.to_string())?;
+    let backup_dir = cfg.backup_dir.as_deref();
+    backup_engine::diagnose_backups(backup_dir).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -124,6 +152,34 @@ fn sync_items(
     backup_engine::sync_items(&items, &source_path, &target_path).map_err(|e| e.to_string())
 }
 
+// ===== 通用文件夹差异对比 =====
+
+#[tauri::command]
+fn scan_dir_tree(dir_path: String) -> Result<Vec<dir_diff::FileEntry>, String> {
+    dir_diff::scan_dir_tree(&dir_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn diff_dirs(source_path: String, target_path: String) -> Result<dir_diff::DiffResult, String> {
+    dir_diff::diff_dirs(&source_path, &target_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn sync_dir_items(
+    items: Vec<dir_diff::DiffEntry>,
+    source_path: String,
+    target_path: String,
+) -> Result<backup_engine::SyncResult, String> {
+    // 将 DiffEntry 转换为 SyncItemInput
+    let sync_items: Vec<backup_engine::SyncItemInput> = items.iter().map(|item| backup_engine::SyncItemInput {
+        category: "folder_file".to_string(),
+        item_type: if item.is_dir { "dir".to_string() } else { "file".to_string() },
+        name: item.rel_path.clone(),
+        action: "SyncToTarget".to_string(),
+    }).collect();
+    backup_engine::sync_items(&sync_items, &source_path, &target_path).map_err(|e| e.to_string())
+}
+
 // ===== 窗口与托盘 =====
 
 #[tauri::command]
@@ -135,8 +191,8 @@ fn hide_to_tray(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_window_state(is_dark: bool) -> Result<(), String> {
-    app_config::save_window_state(is_dark).map_err(|e| e.to_string())
+fn save_window_state(is_dark: bool, width: Option<u32>, height: Option<u32>, maximized: bool) -> Result<(), String> {
+    app_config::save_window_state(is_dark, width, height, maximized).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -187,6 +243,8 @@ fn run() {
             init_app,
             get_app_config,
             save_app_config,
+            get_last_paths,
+            save_last_paths,
             detect_installed_versions,
             validate_custom_path,
             scan_all_configs,
@@ -195,10 +253,14 @@ fn run() {
             scan_directory_tree,
             create_backup,
             list_backups,
+            diagnose_backups,
             delete_backup,
             restore_backup,
             compare_configs,
             sync_items,
+            scan_dir_tree,
+            diff_dirs,
+            sync_dir_items,
             hide_to_tray,
             save_window_state,
             get_window_state,
