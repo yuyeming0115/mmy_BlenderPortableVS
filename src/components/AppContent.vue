@@ -97,17 +97,17 @@ function toggleLang() {
       <div class="sidebar" @mousedown="startWindowDrag">
         <button
           class="nav-btn"
-          :class="{ active: currentPage === 'main' }"
+          :class="{ active: currentPage === 'main', 'has-version': !!store.versionA }"
           @click="navigate('main')"
         >
-          <span class="nav-label">{{ t('nav_drag_a') }}</span>
+          <span class="nav-label">{{ store.versionA ? `A · ${store.versionA}` : t('nav_drag_a') }}</span>
         </button>
         <button
           class="nav-btn"
-          :class="{ active: currentPage === 'main' }"
+          :class="{ active: currentPage === 'main', 'has-version': !!store.versionB }"
           @click="navigate('main')"
         >
-          <span class="nav-label">{{ t('nav_drag_b') }}</span>
+          <span class="nav-label">{{ store.versionB ? `B · ${store.versionB}` : t('nav_drag_b') }}</span>
         </button>
         <div class="nav-divider"></div>
         <button
@@ -229,6 +229,18 @@ body:not(.dark) .nav-btn:hover {
 body:not(.dark) .nav-btn.active {
   background: rgba(33, 150, 243, 0.15);
   color: #1976d2;
+}
+.nav-btn.has-version {
+  background: rgba(76, 175, 80, 0.15);
+  color: #81c784;
+}
+body:not(.dark) .nav-btn.has-version {
+  background: rgba(76, 175, 80, 0.1);
+  color: #2e7d32;
+}
+.nav-btn.has-version.active {
+  background: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
 }
 .nav-label {
   display: block;

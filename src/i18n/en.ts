@@ -70,6 +70,11 @@ export default {
   select_path: 'Select Path',
   loading: 'Loading...',
   empty: 'No data',
+  // Drop related
+  invalid_blender_path: 'Not a valid Blender config directory',
+  drop_error: 'Drop handling failed',
+  drop_auto_scan: 'Valid path, auto-scanning...',
+  drop_file_fallback: 'File detected, switched to parent directory',
   minimize: 'Minimize',
   maximize: 'Maximize',
   close: 'Close',

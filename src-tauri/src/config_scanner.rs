@@ -299,3 +299,118 @@ fn parse_bl_info(file_path: &PathBuf) -> Option<serde_json::Value> {
     }
     None
 }
+
+/// 目录条目信息
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DirectoryEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size_bytes: u64,
+    pub modified_time: Option<String>,
+}
+
+/// 扫描目录结构：只列一级目录和关键子项，不递归深入插件内部
+pub fn scan_directory_tree(dir_path: &str) -> std::io::Result<Vec<DirectoryEntry>> {
+    let dir = PathBuf::from(dir_path);
+    if !dir.exists() || !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+
+    // 扫描一级目录和文件
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let metadata = fs::metadata(&path).ok();
+        let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+        let modified_time = metadata
+            .and_then(|m| m.modified().ok())
+            .map(|t| {
+                let dt: DateTime<Utc> = t.into();
+                dt.to_rfc3339()
+            });
+
+        let is_dir = path.is_dir();
+        entries.push(DirectoryEntry {
+            name: name.clone(),
+            path: name.clone(),
+            is_dir,
+            size_bytes,
+            modified_time,
+        });
+
+        // 对已知子目录，再扫一层
+        if is_dir {
+            let sub_entries = scan_known_subdir(&path, &name);
+            entries.extend(sub_entries);
+        }
+    }
+
+    // 按路径排序
+    entries.sort_by(|a, b| {
+        // 文件夹排前面
+        match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.path.cmp(&b.path),
+        }
+    });
+
+    Ok(entries)
+}
+
+/// 扫描已知子目录的一级内容（不递归深入插件内部）
+fn scan_known_subdir(parent: &PathBuf, parent_name: &str) -> Vec<DirectoryEntry> {
+    let mut results = Vec::new();
+
+    // 需要深入一层的子目录
+    let sub_dirs = match parent_name {
+        "scripts" => vec!["addons", "presets", "startup"],
+        "datafiles" => vec![],  // datafiles 只需要一级
+        "extensions" => vec![], // extensions 只需要一级
+        _ => vec![],
+    };
+
+    for sub_name in sub_dirs {
+        let sub_path = parent.join(sub_name);
+        if !sub_path.exists() || !sub_path.is_dir() {
+            continue;
+        }
+
+        // 扫描这个子目录的一级内容
+        if let Ok(entries) = fs::read_dir(&sub_path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                let name = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let rel_path = format!("{}/{}/{}", parent_name, sub_name, name);
+                let metadata = fs::metadata(&path).ok();
+                let size_bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified_time = metadata
+                    .and_then(|m| m.modified().ok())
+                    .map(|t| {
+                        let dt: DateTime<Utc> = t.into();
+                        dt.to_rfc3339()
+                    });
+
+                // 插件/扩展文件夹：只列出文件夹本身，不深入内部
+                results.push(DirectoryEntry {
+                    name,
+                    path: rel_path,
+                    is_dir: path.is_dir(),
+                    size_bytes,
+                    modified_time,
+                });
+            }
+        }
+    }
+
+    results
+}

@@ -146,6 +146,14 @@ export interface SyncItemInput {
   action: string
 }
 
+export interface DirectoryEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size_bytes: number
+  modified_time: string | null
+}
+
 export interface AppConfig {
   language: string
   backup_dir: string | null
@@ -161,9 +169,17 @@ export const useAppStore = defineStore('app', () => {
     auto_detect_on_startup: true,
   })
 
+  // A/B 面板路径与版本
+  const pathA = ref('')
+  const pathB = ref('')
+  const versionA = ref('')
+  const versionB = ref('')
+
   const installedVersions = ref<BlenderInstallation[]>([])
   const scanResultA = ref<ScanResult | null>(null)
   const scanResultB = ref<ScanResult | null>(null)
+  const dirEntriesA = ref<DirectoryEntry[]>([])
+  const dirEntriesB = ref<DirectoryEntry[]>([])
   const comparisonResult = ref<ComparisonResult | null>(null)
   const backups = ref<BackupInfo[]>([])
 
@@ -200,11 +216,34 @@ export const useAppStore = defineStore('app', () => {
 
   // ===== 配置扫描 =====
   async function scanPathA(path: string) {
+    pathA.value = path
+    // 先验证获取版本号
+    const validation = await invoke<PathValidation>('validate_custom_path', { path })
+    versionA.value = validation.version || ''
+    // 再扫描
     scanResultA.value = await invoke<ScanResult>('scan_all_configs', { configPath: path })
+    dirEntriesA.value = await invoke<DirectoryEntry[]>('scan_directory_tree', { dirPath: path })
   }
 
   async function scanPathB(path: string) {
+    pathB.value = path
+    // 先验证获取版本号
+    const validation = await invoke<PathValidation>('validate_custom_path', { path })
+    versionB.value = validation.version || ''
+    // 再扫描
     scanResultB.value = await invoke<ScanResult>('scan_all_configs', { configPath: path })
+    dirEntriesB.value = await invoke<DirectoryEntry[]>('scan_directory_tree', { dirPath: path })
+  }
+
+  /** 仅更新路径和版本号（拖放验证后调用） */
+  function setSideVersion(side: 'A' | 'B', path: string, version: string) {
+    if (side === 'A') {
+      pathA.value = path
+      versionA.value = version
+    } else {
+      pathB.value = path
+      versionB.value = version
+    }
   }
 
   // ===== 差异比较 =====
@@ -281,9 +320,15 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     config,
+    pathA,
+    pathB,
+    versionA,
+    versionB,
     installedVersions,
     scanResultA,
     scanResultB,
+    dirEntriesA,
+    dirEntriesB,
     comparisonResult,
     backups,
     selectedSyncItems,
@@ -295,6 +340,7 @@ export const useAppStore = defineStore('app', () => {
     validatePath,
     scanPathA,
     scanPathB,
+    setSideVersion,
     comparePaths,
     getBookmarks,
     getAddons,

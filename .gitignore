@@ -165,3 +165,14 @@ temp/
 # Claude Code 配置
 .claude/
 CLAUDE.md
+.workbuddy/
+
+# ===== Tauri / Node.js =====
+node_modules/
+dist-ssr/
+*.local
+
+# Tauri 构建输出
+src-tauri/target/
+
+# ===== Python =====

@@ -80,6 +80,11 @@ export default {
   select_path: '选择路径',
   loading: '加载中...',
   empty: '暂无数据',
+  // 拖放相关
+  invalid_blender_path: '不是有效的 Blender 配置目录',
+  drop_error: '拖放处理失败',
+  drop_auto_scan: '路径有效，自动扫描中...',
+  drop_file_fallback: '检测到文件，已切换到其所在目录',
   // 窗口操作
   minimize: '最小化',
   maximize: '最大化',

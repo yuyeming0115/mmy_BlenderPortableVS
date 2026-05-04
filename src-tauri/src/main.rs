@@ -65,6 +65,13 @@ fn list_addons(config_path: String) -> Result<Vec<config_scanner::AddonInfo>, St
     config_scanner::list_addons(&config_path).map_err(|e| e.to_string())
 }
 
+// ===== 目录扫描 =====
+
+#[tauri::command]
+fn scan_directory_tree(dir_path: String) -> Result<Vec<config_scanner::DirectoryEntry>, String> {
+    config_scanner::scan_directory_tree(&dir_path).map_err(|e| e.to_string())
+}
+
 // ===== 备份管理 =====
 
 #[tauri::command]
@@ -185,6 +192,7 @@ fn run() {
             scan_all_configs,
             read_bookmarks,
             list_addons,
+            scan_directory_tree,
             create_backup,
             list_backups,
             delete_backup,
