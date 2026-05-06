@@ -104,9 +104,9 @@ async function toggleMax() {
 
 async function doCloseWindow() {
   try {
-    await invoke('hide_to_tray')
+    await invoke('exit_app')
   } catch {
-    await appWindow.hide().catch(() => { })
+    appWindow.close().catch(() => { })
   }
 }
 

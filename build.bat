@@ -48,10 +48,21 @@ echo ============================================================
 echo.
 
 mkdir dist 2>nul
+
+:: 复制便携版（单文件exe）
+set PORTABLE_EXE=src-tauri\target\release\blender-config-sync.exe
+if exist "%PORTABLE_EXE%" (
+    copy "%PORTABLE_EXE%" "dist\Blender Config Sync Portable.exe" >nul
+    echo   [便携版] Blender Config Sync Portable.exe
+    for %%A in ("dist\Blender Config Sync Portable.exe") do echo   大小: %%~zA bytes
+    echo.
+)
+
+:: 复制安装版
 set OUTDIR=src-tauri\target\release\bundle\nsis
-for %%F in (%OUTDIR%\*.exe) do (
+for %%F in (%OUTDIR%\*-setup.exe) do (
     copy "%%F" dist\ >nul
-    echo   已复制: %%~nxF
+    echo   [安装版] %%~nxF
     for %%A in ("dist\%%~nxF") do echo   大小: %%~zA bytes
 )
 

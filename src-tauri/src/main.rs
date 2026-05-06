@@ -191,6 +191,11 @@ fn hide_to_tray(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
 fn save_window_state(is_dark: bool, width: Option<u32>, height: Option<u32>, maximized: bool) -> Result<(), String> {
     app_config::save_window_state(is_dark, width, height, maximized).map_err(|e| e.to_string())
 }
@@ -203,8 +208,8 @@ fn get_window_state() -> Result<Option<serde_json::Value>, String> {
 // ===== 托盘设置 =====
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let show_item = MenuItem::new(app, "显示窗口", true, None::<&str>)?;
-    let quit_item = MenuItem::new(app, "退出", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show_item)
@@ -228,6 +233,21 @@ fn run() {
         .setup(|app| {
             setup_tray(app)?;
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            // 根据菜单项 ID 处理点击事件
+            match event.id.as_ref() {
+                "show" => {
+                    if let Some(win) = app.get_webview_window("main") {
+                        win.show().unwrap();
+                        win.set_focus().unwrap();
+                    }
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button, .. } = event {
@@ -262,6 +282,7 @@ fn run() {
             diff_dirs,
             sync_dir_items,
             hide_to_tray,
+            exit_app,
             save_window_state,
             get_window_state,
         ])
